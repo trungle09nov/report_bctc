@@ -5,6 +5,7 @@ Output: JSON
 import sys, os
 import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.stdout.reconfigure(encoding='utf-8')
 
 from core.analyst import FinBotService
 from pathlib import Path
@@ -125,4 +126,9 @@ if __name__ == "__main__":
         "consolidated": r1,
         "parent": r2
     }
-    print(json.dumps(results, ensure_ascii=False, indent=2))
+    
+    # Ghi file với UTF-8
+    output_path = os.path.join(os.path.dirname(__file__), "..", "output.json")
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+    print(f"Đã ghi: {os.path.abspath(output_path)}")

@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinBot Viewer</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --accent: #f78166;
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-yellow: #d29922;
+      --accent-purple: #bc8cff;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .logo { font-size: 24px; font-weight: 700; }
+    .logo span { color: var(--accent-blue); }
+    
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--surface2);
+      padding: 4px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .tab {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .tab.active {
+      background: var(--accent-blue);
+      color: #000;
+    }
+    
+    /* Upload */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .upload-zone:hover { border-color: var(--accent-blue); }
+    .upload-zone.dragover { border-color: var(--accent-green); background: rgba(63, 185, 80, 0.1); }
+    .upload-zone input { display: none; }
+    
+    /* Summary Card */
+    .summary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .summary-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .summary-text { line-height: 1.7; }
+    
+    /* Metrics Grid */
+    .metrics-title {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .metric-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .metric-card.highlight { border-color: var(--accent-blue); }
+    .metric-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .metric-value {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: 'Consolas', monospace;
+    }
+    .metric-delta {
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .metric-delta.positive { color: var(--accent-green); }
+    .metric-delta.negative { color: var(--accent); }
+    
+    /* Flags */
+    .flags { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+    .flag {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .flag.WARNING { border-left: 3px solid var(--accent-yellow); }
+    .flag.INFO { border-left: 3px solid var(--accent-blue); }
+    .flag.ALERT { border-left: 3px solid var(--accent); }
+    .badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge.WARNING { background: #3d2900; color: var(--accent-yellow); }
+    .badge.INFO { background: #0d2149; color: var(--accent-blue); }
+    .badge.ALERT { background: #3d0000; color: var(--accent); }
+    .flag-msg { font-size: 13px; line-height: 1.5; }
+    
+    /* DuPont Section */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      color: var(--accent-purple);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .dupont-formula {
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--surface2);
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .dupont-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .dupont-item {
+      text-align: center;
+      padding: 10px;
+      background: var(--surface2);
+      border-radius: 6px;
+    }
+    .dupont-item-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .dupont-item-value { font-size: 16px; font-weight: 700; }
+    
+    /* Beneish */
+    .mscore {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      background: var(--surface2);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .mscore-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'Consolas', monospace;
+    }
+    .mscore-interpretation { font-size: 14px; }
+    .mscore.clean { border-left: 4px solid var(--accent-green); }
+    .mscore.gray { border-left: 4px solid var(--accent-yellow); }
+    .mscore.manipulator { border-left: 4px solid var(--accent); }
+    
+    /* Components table */
+    .components {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .component {
+      background: var(--surface2);
+      padding: 8px 12px;
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .component-name { color: var(--text-muted); }
+    .component-value { font-family: 'Consolas', monospace; }
+    
+    /* Cashflow */
+    .cashflow-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .cashflow-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .cashflow-label { color: var(--text-muted); }
+    .cashflow-value { font-family: 'Consolas', monospace; font-weight: 600; }
+    
+    /* Loading */
+    .loading {
+      text-align: center;
+      padding: 60px;
+      color: var(--text-muted);
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent-blue);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    /* No data */
+    .no-data {
+      text-align: center;
+      padding: 60px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <div class="logo"><span>Fin</span>Bot</div>
+        <div style="font-size: 12px; color: var(--text-muted);">Financial Analysis Viewer</div>
+      </div>
+      <div class="tabs" id="reportTabs" style="display: none;">
+        <button class="tab active" data-type="consolidated">Hợp nhất</button>
+        <button class="tab" data-type="parent">Công ty mẹ</button>
+      </div>
+    </div>
+    
+    <!-- Upload Zone -->
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept=".json">
+      <div style="font-size: 32px; margin-bottom: 12px;">📂</div>
+      <div style="font-size: 14px; margin-bottom: 8px;">Kéo thả file JSON hoặc click để chọn</div>
+      <div style="font-size: 12px; color: var(--text-muted);">Output từ: python tests/test_v3.py > output.json</div>
+    </div>
+    
+    <!-- Content -->
+    <div id="content"></div>
+  </div>
+
+  <script>
+    let currentData = null;
+    let currentType = 'consolidated';
+    
+    // Upload handlers
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) loadFile(file);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) loadFile(e.target.files[0]);
+    });
+    
+    function loadFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          currentData = JSON.parse(e.target.result);
+          uploadZone.style.display = 'none';
+          document.getElementById('reportTabs').style.display = 'flex';
+          renderReport();
+        } catch (err) {
+          alert('Lỗi parse JSON: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+    
+    // Tab switching
+    document.getElementById('reportTabs').addEventListener('click', (e) => {
+      if (e.target.classList.contains('tab')) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        e.target.classList.add('active');
+        currentType = e.target.dataset.type;
+        renderReport();
+      }
+    });
+    
+    function formatValue(val, unit = '') {
+      if (val === null || val === undefined) return 'N/A';
+      if (typeof val !== 'number') return val;
+      if (Math.abs(val) >= 1000) return (val / 1000).toFixed(1) + ' nghìn tỷ';
+      if (!Number.isInteger(val)) return val.toFixed(2) + unit;
+      return val + unit;
+    }
+    
+    function renderReport() {
+      const data = currentData[currentType];
+      if (!data) {
+        document.getElementById('content').innerHTML = '<div class="no-data">Không có dữ liệu</div>';
+        return;
+      }
+      
+      const m = data.metrics;
+      const dp = data.dupont;
+      const cf = data.cashflow;
+      const b = data.beneish;
+      const flags = data.flags || [];
+      
+      let html = '';
+      
+      // Metadata header
+      html += `
+        <div class="summary">
+          <div class="summary-label">📋 ${data.metadata.company_name || 'N/A'}</div>
+          <div class="summary-text">
+            <strong>Kỳ:</strong> ${data.metadata.period || 'N/A'} | 
+            <strong>Loại:</strong> ${data.metadata.report_type === 'consolidated' ? 'Hợp nhất' : 'Công ty mẹ'}
+            ${data.metadata.is_holding_company ? ' | <span style="color: var(--accent-yellow)">⚡ Holding Company</span>' : ''}
+          </div>
+        </div>
+      `;
+      
+      // Key Metrics
+      html += '<div class="metrics-title">📈 Chỉ số chính</div>';
+      html += '<div class="metrics-grid">';
+      const metrics = [
+        { label: 'Doanh thu', value: m.revenue, highlight: true },
+        { label: 'LNST', value: m.net_profit, highlight: true },
+        { label: 'Tổng tài sản', value: m.total_assets },
+        { label: 'Vốn chủ sở hữu', value: m.equity },
+        { label: 'Biên LN gộp', value: m.gross_margin, unit: '%' },
+        { label: 'Biên LN ròng', value: m.net_margin, unit: '%' },
+        { label: 'ROE', value: m.roe, unit: '%' },
+        { label: 'ROA', value: m.roa, unit: '%' },
+        { label: 'Current Ratio', value: m.current_ratio, unit: 'x' },
+        { label: 'Quick Ratio', value: m.quick_ratio, unit: 'x' },
+        { label: 'D/E Ratio', value: m.debt_to_equity, unit: 'x' },
+        { label: 'DSO', value: m.dso, unit: ' ngày' },
+        { label: 'Inventory Days', value: m.inventory_days, unit: ' ngày' },
+        { label: 'DT tăng trưởng YoY', value: m.revenue_growth_yoy, unit: '%' },
+        { label: 'LN tăng trưởng YoY', value: m.profit_growth_yoy, unit: '%' },
+      ];
+      
+      metrics.forEach(metric => {
+        if (metric.value !== null && metric.value !== undefined) {
+          html += `
+            <div class="metric-card ${metric.highlight ? 'highlight' : ''}">
+              <div class="metric-label">${metric.label}</div>
+              <div class="metric-value">${formatValue(metric.value, metric.unit || '')}</div>
+            </div>
+          `;
+        }
+      });
+      html += '</div>';
+      
+      // DuPont Analysis
+      if (dp) {
+        html += `
+          <div class="section">
+            <div class="section-title">🔬 DUPONT DECOMPOSITION</div>
+            <div class="dupont-formula">ROE = Net Margin × Asset Turnover × Equity Multiplier</div>
+            <div class="dupont-grid">
+              <div class="dupont-item">
+                <div class="dupont-item-label">ROE (3-Factor)</div>
+                <div class="dupont-item-value" style="color: var(--accent-green)">${dp.roe_dupont_3f !== null ? dp.roe_dupont_3f?.toFixed(2) + '%' : 'N/A'}</div>
+              </div>
+              <div class="dupont-item">
+                <div class="dupont-item-label">ROE (5-Factor)</div>
+                <div class="dupont-item-value" style="color: var(--accent-blue)">${dp.roe_dupont_5f !== null ? dp.roe_dupont_5f?.toFixed(2) + '%' : 'N/A'}</div>
+              </div>
+              <div class="dupont-item">
+                <div class="dupont-item-label">Equity Multiplier</div>
+                <div class="dupont-item-value">${dp.equity_multiplier !== null ? dp.equity_multiplier?.toFixed(2) + 'x' : 'N/A'}</div>
+              </div>
+            </div>
+            <div style="margin-top: 12px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+              <div style="text-align: center; font-size: 12px;">
+                <div style="color: var(--text-muted)">Net Margin</div>
+                <div style="font-weight: 600">${dp.net_margin?.toFixed(2) || 'N/A'}%</div>
+              </div>
+              <div style="text-align: center; font-size: 12px;">
+                <div style="color: var(--text-muted)">Asset Turnover</div>
+                <div style="font-weight: 600">${dp.asset_turnover?.toFixed(2) || 'N/A'}x</div>
+              </div>
+              <div style="text-align: center; font-size: 12px;">
+                <div style="color: var(--text-muted)">Tax Burden</div>
+                <div style="font-weight: 600">${dp.tax_burden?.toFixed(3) || 'N/A'}</div>
+              </div>
+              <div style="text-align: center; font-size: 12px;">
+                <div style="color: var(--text-muted)">Interest Burden</div>
+                <div style="font-weight: 600">${dp.interest_burden?.toFixed(3) || 'N/A'}</div>
+              </div>
+              <div style="text-align: center; font-size: 12px;">
+                <div style="color: var(--text-muted)">EBIT Margin</div>
+                <div style="font-weight: 600">${dp.ebit_margin?.toFixed(2) || 'N/A'}%</div>
+              </div>
+            </div>
+            ${dp.roe_from_operations !== null ? `
+            <div style="margin-top: 16px; padding: 12px; background: var(--surface2); border-radius: 6px;">
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Nguồn gốc ROE</div>
+              <div style="display: flex; gap: 20px;">
+                <div>
+                  <span style="color: var(--accent-green)">Từ vận hành:</span>
+                  <span style="font-weight: 600; margin-left: 8px">${dp.roe_from_operations?.toFixed(2)}%</span>
+                </div>
+                <div>
+                  <span style="color: var(--accent-yellow)">Từ đòn bẩy:</span>
+                  <span style="font-weight: 600; margin-left: 8px">${dp.roe_from_leverage?.toFixed(2)}%</span>
+                </div>
+              </div>
+            </div>` : ''}
+          </div>
+        `;
+      }
+      
+      // Cashflow
+      if (cf) {
+        html += `
+          <div class="section">
+            <div class="section-title">💵 DÒNG TIỀN & CCC</div>
+            <div class="cashflow-grid">
+              <div>
+                <div class="cashflow-item">
+                  <span class="cashflow-label">Cash Conversion Cycle</span>
+                  <span class="cashflow-value">${cf.ccc !== null ? cf.ccc.toFixed(0) + ' ngày' : 'N/A'}</span>
+                </div>
+                <div class="cashflow-item">
+                  <span class="cashflow-label">DSO</span>
+                  <span class="cashflow-value">${cf.dso?.toFixed(1) || 'N/A'} ngày</span>
+                </div>
+                <div class="cashflow-item">
+                  <span class="cashflow-label">DIO</span>
+                  <span class="cashflow-value">${cf.dio?.toFixed(1) || 'N/A'} ngày</span>
+                </div>
+                <div class="cashflow-item">
+                  <span class="cashflow-label">DPO</span>
+                  <span class="cashflow-value">${cf.dpo?.toFixed(1) || 'N/A'} ngày</span>
+                </div>
+              </div>
+              <div>
+                <div class="cashflow-item">
+                  <span class="cashflow-label">CFO</span>
+                  <span class="cashflow-value">${cf.cfo !== null ? formatValue(cf.cfo) : 'N/A'}</span>
+                </div>
+                <div class="cashflow-item">
+                  <span class="cashflow-label">FCF (CFO - Capex)</span>
+                  <span class="cashflow-value" style="color: ${cf.fcf >= 0 ? 'var(--accent-green)' : 'var(--accent)'}">
+                    ${cf.fcf !== null ? (cf.fcf >= 0 ? '+' : '') + formatValue(cf.fcf) : 'N/A'}
+                  </span>
+                </div>
+                <div class="cashflow-item">
+                  <span class="cashflow-label">FCF Yield</span>
+                  <span class="cashflow-value">${cf.fcf_yield?.toFixed(1) || 'N/A'}%</span>
+                </div>
+                <div class="cashflow-item">
+                  <span class="cashflow-label">Cash Conversion (CFO/LNST)</span>
+                  <span class="cashflow-value">${cf.cash_conversion?.toFixed(2) || 'N/A'}x</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      
+      // Beneish M-Score
+      if (b && b.m_score !== null) {
+        const scoreClass = b.interpretation === 'likely_clean' ? 'clean' : 
+                          b.interpretation === 'gray_zone' ? 'gray' : 'manipulator';
+        const interpLabel = {
+          'likely_clean': '✅ Likely Clean',
+          'gray_zone': '⚠️ Gray Zone',
+          'likely_manipulator': '🚨 Potential Manipulator',
+          'cannot_assess': '❓ Cannot Assess'
+        };
+        
+        html += `
+          <div class="section">
+            <div class="section-title">🔍 BENEISH M-SCORE</div>
+            <div class="mscore ${scoreClass}">
+              <div class="mscore-value">${b.m_score.toFixed(3)}</div>
+              <div>
+                <div class="mscore-interpretation">${interpLabel[b.interpretation] || b.interpretation}</div>
+                <div style="font-size: 12px; color: var(--text-muted)">Confidence: ${b.confidence}</div>
+              </div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Components:</div>
+            <div class="components">
+              ${Object.entries(b.components || {}).map(([k, v]) => `
+                <div class="component">
+                  <span class="component-name">${k.toUpperCase()}</span>
+                  <span class="component-value">${v !== null ? v.toFixed(4) : 'N/A'}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+      
+      // Flags
+      if (flags.length > 0) {
+        html += '<div class="metrics-title">🚩 Phát hiện tự động</div>';
+        html += '<div class="flags">';
+        flags.forEach(flag => {
+          const badgeLabel = flag.type === 'WARNING' ? '⚠ Cảnh báo' : 
+                            flag.type === 'ALERT' ? '🚨 Alert' : 'ℹ Lưu ý';
+          html += `
+            <div class="flag ${flag.type}">
+              <span class="badge ${flag.type}">${badgeLabel}</span>
+              <div>
+                <div style="font-weight: 600; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">[${flag.code}]</div>
+                <div class="flag-msg">${flag.message}</div>
+              </div>
+            </div>
+          `;
+        });
+        html += '</div>';
+      }
+      
+      document.getElementById('content').innerHTML = html;
+    }
+  </script>
+</body>
+</html>
