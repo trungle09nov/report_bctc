@@ -208,3 +208,135 @@ class AnomalyDetector:
                 detail={"revenue_growth_pct": metrics.revenue_growth_yoy}
             ))
         return flags
+
+    def detect_advanced(self, data, metrics, cf_metrics, beneish) -> list[Flag]:
+        """Anomaly rules nâng cao dùng CashFlowMetrics và BeneishScore"""
+        flags = []
+        flags.extend(self._check_earnings_quality(metrics, cf_metrics))
+        flags.extend(self._check_fcf(metrics, cf_metrics))
+        flags.extend(self._check_ccc(cf_metrics))
+        flags.extend(self._check_beneish(beneish))
+        return flags
+
+    def _check_earnings_quality(self, metrics, cf_metrics) -> list[Flag]:
+        flags = []
+        if cf_metrics is None:
+            return flags
+
+        # Cash conversion < 0.5 → lợi nhuận phần lớn là accruals
+        if cf_metrics.cash_conversion is not None and cf_metrics.cash_conversion < 0.5:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="LOW_CASH_CONVERSION",
+                message=(
+                    f"Cash conversion = {cf_metrics.cash_conversion:.2f}x: "
+                    f"CFO ({cf_metrics.cfo:.0f} tỷ) chỉ bằng {cf_metrics.cash_conversion*100:.0f}% LNST. "
+                    "Lợi nhuận kế toán chuyển đổi thành tiền mặt thực tế thấp — cần kiểm tra accruals."
+                ),
+                detail={
+                    "cfo_bil": cf_metrics.cfo,
+                    "net_profit_bil": metrics.net_profit,
+                    "cash_conversion": cf_metrics.cash_conversion,
+                }
+            ))
+        elif cf_metrics.cash_conversion is not None and cf_metrics.cash_conversion < 0:
+            flags.append(Flag(
+                type=FlagType.ALERT,
+                code="NEGATIVE_CFO",
+                message=(
+                    f"CFO âm ({cf_metrics.cfo:.0f} tỷ) trong khi LNST dương ({metrics.net_profit:.0f} tỷ). "
+                    "Hoạt động kinh doanh đang tiêu tiền mặt dù báo lãi."
+                ),
+                detail={"cfo_bil": cf_metrics.cfo, "net_profit_bil": metrics.net_profit}
+            ))
+
+        # Accrual ratio > 5% → đáng chú ý
+        if cf_metrics.accrual_ratio is not None and cf_metrics.accrual_ratio > 5:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="HIGH_ACCRUAL_RATIO",
+                message=(
+                    f"Accrual ratio = {cf_metrics.accrual_ratio:.1f}% — "
+                    "lợi nhuận dựa nhiều vào ghi nhận kế toán hơn tiền thực. "
+                    "Cần đối chiếu với xu hướng các kỳ trước."
+                ),
+                detail={"accrual_ratio_pct": cf_metrics.accrual_ratio}
+            ))
+        return flags
+
+    def _check_fcf(self, metrics, cf_metrics) -> list[Flag]:
+        flags = []
+        if cf_metrics is None or cf_metrics.fcf is None:
+            return flags
+
+        if cf_metrics.fcf < 0 and metrics.net_profit and metrics.net_profit > 0:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="NEGATIVE_FCF",
+                message=(
+                    f"FCF âm ({cf_metrics.fcf:.0f} tỷ) — CAPEX ({cf_metrics.capex_total:.0f} tỷ) "
+                    f"vượt CFO ({cf_metrics.cfo:.0f} tỷ). "
+                    "Giai đoạn đầu tư lớn: bình thường nếu là growth capex, "
+                    "đáng lo nếu kéo dài nhiều kỳ."
+                ),
+                detail={
+                    "fcf_bil": cf_metrics.fcf,
+                    "cfo_bil": cf_metrics.cfo,
+                    "capex_bil": cf_metrics.capex_total,
+                }
+            ))
+        return flags
+
+    def _check_ccc(self, cf_metrics) -> list[Flag]:
+        flags = []
+        if cf_metrics is None or cf_metrics.ccc is None:
+            return flags
+
+        if cf_metrics.ccc > 180:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="LONG_CASH_CYCLE",
+                message=(
+                    f"Cash Conversion Cycle = {cf_metrics.ccc:.0f} ngày "
+                    f"(DSO {cf_metrics.dso or 'N/A'} + DIO {cf_metrics.dio or 'N/A'} "
+                    f"- DPO {cf_metrics.dpo or 'N/A'}). "
+                    "Chu kỳ chuyển đổi tiền mặt dài — vốn lưu động bị chiếm dụng nhiều."
+                ),
+                detail={
+                    "ccc_days": cf_metrics.ccc,
+                    "dso": cf_metrics.dso,
+                    "dio": cf_metrics.dio,
+                    "dpo": cf_metrics.dpo,
+                }
+            ))
+        return flags
+
+    def _check_beneish(self, beneish) -> list[Flag]:
+        flags = []
+        if beneish is None or beneish.m_score is None:
+            return flags
+
+        if beneish.interpretation == "likely_manipulator":
+            flags.append(Flag(
+                type=FlagType.ALERT,
+                code="BENEISH_HIGH_RISK",
+                message=(
+                    f"Beneish M-Score = {beneish.m_score:.2f} (ngưỡng cảnh báo: -1.78). "
+                    "Mô hình phát hiện nguy cơ làm đẹp BCTC — "
+                    f"độ tin cậy: {beneish.confidence}. "
+                    "Lưu ý: Model calibrate trên thị trường Mỹ, cần đọc kỹ từng thành phần (DSRI, TATA) "
+                    "trước khi kết luận — tăng trưởng thực cũng có thể trigger false positive."
+                ),
+                detail=beneish.to_dict()
+            ))
+        elif beneish.interpretation == "gray_zone":
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="BENEISH_GRAY_ZONE",
+                message=(
+                    f"Beneish M-Score = {beneish.m_score:.2f} (vùng xám -2.22 đến -1.78). "
+                    "Một số chỉ số kế toán có dấu hiệu bất thường, cần theo dõi thêm."
+                ),
+                detail=beneish.to_dict()
+            ))
+        return flags

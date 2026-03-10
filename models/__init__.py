@@ -7,3 +7,4 @@ __all__ = [
     "AnalysisResult", "FinancialMetrics",
     "Flag", "FlagType",
 ]
+from .metrics import DuPontMetrics, CashFlowMetrics, BeneishScore

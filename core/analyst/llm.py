@@ -38,7 +38,7 @@ class LLMAnalyst:
         """
         Phân tích đầy đủ — trả về dict với executive_summary, highlights, sections, v.v.
         """
-        prompt = build_analysis_prompt(data, result.metrics, result.flags, language)
+        prompt = build_analysis_prompt(data, result.metrics, result.flags, language, dupont=result.dupont, cashflow=result.cashflow, beneish=result.beneish)
 
         try:
             response = self.client.messages.create(

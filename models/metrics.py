@@ -70,14 +70,100 @@ class FinancialMetrics:
 class AnalysisResult:
     """Kết quả phân tích đầy đủ"""
     metrics: FinancialMetrics = field(default_factory=FinancialMetrics)
+    dupont: Optional["DuPontMetrics"] = None
+    cashflow: Optional["CashFlowMetrics"] = None
+    beneish: Optional["BeneishScore"] = None
     flags: list[Flag] = field(default_factory=list)
-    llm_analysis: dict = field(default_factory=dict)   # Output từ Claude
+    llm_analysis: dict = field(default_factory=dict)
     segment_analysis: list[dict] = field(default_factory=list)
 
     def to_api_response(self) -> dict:
-        return {
+        result = {
             "metrics": self.metrics.to_dict(),
             "flags": [f.to_dict() for f in self.flags],
             "analysis": self.llm_analysis,
             "segments": self.segment_analysis,
         }
+        if self.dupont:
+            result["dupont"] = self.dupont.to_dict()
+        if self.cashflow:
+            result["cashflow"] = self.cashflow.to_dict()
+        if self.beneish:
+            result["beneish"] = self.beneish.to_dict()
+        return result
+
+
+@dataclass
+class DuPontMetrics:
+    """Phân tích DuPont 3 và 5 nhân tố"""
+    # 3-factor
+    net_margin: Optional[float] = None          # LNST / DT
+    asset_turnover: Optional[float] = None      # DT / TS bình quân (annualized)
+    equity_multiplier: Optional[float] = None   # TS / VCSH
+    roe_dupont_3: Optional[float] = None        # = net_margin × asset_turnover × equity_multiplier
+
+    # 5-factor (Disaggregate net_margin thành tax + interest burden + EBIT margin)
+    tax_burden: Optional[float] = None          # LNST / LNTT  (tax efficiency)
+    interest_burden: Optional[float] = None     # LNTT / EBIT   (interest impact)
+    ebit_margin: Optional[float] = None         # EBIT / DT     (operating efficiency)
+    roe_dupont_5: Optional[float] = None        # = tax × interest × ebit × turnover × leverage
+
+    # Bóc tách nguồn gốc ROE
+    roe_from_operations: Optional[float] = None  # Phần ROE đến từ hiệu quả vận hành
+    roe_from_leverage: Optional[float] = None    # Phần ROE đến từ đòn bẩy
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+
+@dataclass
+class CashFlowMetrics:
+    """Cash Conversion Cycle và phân tích dòng tiền nâng cao"""
+    # CCC components
+    dso: Optional[float] = None                 # Days Sales Outstanding
+    dio: Optional[float] = None                 # Days Inventory Outstanding
+    dpo: Optional[float] = None                 # Days Payable Outstanding
+    ccc: Optional[float] = None                 # CCC = DSO + DIO - DPO
+
+    # Free Cash Flow
+    cfo: Optional[float] = None                 # Operating cash flow
+    capex_total: Optional[float] = None         # Tổng capex
+    fcf: Optional[float] = None                 # FCF = CFO - Capex
+    fcf_yield: Optional[float] = None           # FCF / Revenue (%)
+    fcf_to_net_profit: Optional[float] = None   # FCF / LNST — chất lượng lợi nhuận
+
+    # Earnings quality
+    accrual_ratio: Optional[float] = None       # (LNST - CFO) / TS bình quân
+    cash_conversion: Optional[float] = None     # CFO / LNST — >1 là tốt
+
+    # CFO breakdown
+    cfo_prev: Optional[float] = None
+    cfo_growth: Optional[float] = None
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+
+@dataclass
+class BeneishScore:
+    """
+    Beneish M-Score — phát hiện nguy cơ gian lận BCTC
+    Score > -1.78 → nghi ngờ có manipulation
+    Score > -2.22 → vùng xám, cần xem xét kỹ
+    """
+    # 8 thành phần
+    dsri: Optional[float] = None    # Days Sales Receivable Index
+    gmi: Optional[float] = None     # Gross Margin Index
+    aqi: Optional[float] = None     # Asset Quality Index
+    sgi: Optional[float] = None     # Sales Growth Index
+    depi: Optional[float] = None    # Depreciation Index
+    sgai: Optional[float] = None    # SGA Index
+    lvgi: Optional[float] = None    # Leverage Index
+    tata: Optional[float] = None    # Total Accruals to Total Assets
+
+    m_score: Optional[float] = None
+    interpretation: str = ""        # "likely_manipulator" / "gray_zone" / "likely_clean"
+    confidence: str = ""            # "high" / "medium" / "low" (phụ thuộc data đủ không)
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if v is not None}

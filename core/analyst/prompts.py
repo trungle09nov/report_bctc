@@ -61,7 +61,7 @@ Trả về JSON:
 }"""
 
 
-def build_analysis_prompt(data, metrics, flags, language: str = "vi") -> str:
+def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=None, cashflow=None, beneish=None) -> str:
     """Build user prompt với data đã tính sẵn"""
     import json
 
@@ -90,6 +90,11 @@ def build_analysis_prompt(data, metrics, flags, language: str = "vi") -> str:
     if metrics.subsidiary_income:
         key_figures["ln_cty_con_chuyen_ve_ty"] = metrics.subsidiary_income
 
+    # Build extra sections
+    dupont_str = json.dumps(dupont.to_dict(), ensure_ascii=False, indent=2) if dupont else "Không có"
+    cf_str = json.dumps(cashflow.to_dict(), ensure_ascii=False, indent=2) if cashflow else "Không có"
+    beneish_str = json.dumps(beneish.to_dict(), ensure_ascii=False, indent=2) if beneish else "Không có"
+
     prompt = f"""Phân tích báo cáo tài chính sau:
 
 ## THÔNG TIN BÁO CÁO
@@ -110,8 +115,17 @@ def build_analysis_prompt(data, metrics, flags, language: str = "vi") -> str:
 ## PHÂN KHÚC KINH DOANH
 {json.dumps(data.segments, ensure_ascii=False, indent=2) if data.segments else "Không có dữ liệu phân khúc"}
 
+## DUPONT DECOMPOSITION (ROE nguồn gốc)
+{dupont_str}
+
+## DÒNG TIỀN & CHẤT LƯỢNG LỢI NHUẬN
+{cf_str}
+
+## BENEISH M-SCORE (phát hiện làm đẹp BCTC)
+{beneish_str}
+
 ## THUYẾT MINH (trích)
-{data.notes_text[:1500] if data.notes_text else "Không có"}
+{data.notes_text[:1000] if data.notes_text else "Không có"}
 
 Hãy phân tích toàn diện và trả về JSON theo format đã quy định.
 Ngôn ngữ: {"Tiếng Việt" if language == "vi" else "English"}"""
