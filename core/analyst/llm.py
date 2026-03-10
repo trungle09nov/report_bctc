@@ -1,11 +1,12 @@
 """
-LLM Analyst — wrapper cho Claude API
+LLM Analyst — wrapper cho OpenAI-compatible API
 Nhận metrics + flags đã tính → trả về narrative analysis
+Hỗ trợ OpenAI, Azure OpenAI, hoặc bất kỳ endpoint tương thích OpenAI
 """
 import json
 import os
 import logging
-from anthropic import Anthropic
+from openai import OpenAI
 
 from models.report import ReportData
 from models.metrics import AnalysisResult
@@ -16,18 +17,43 @@ from core.analyst.prompts import (
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-20250514"
+# Cấu hình qua env vars
+# OPENAI_API_KEY: API key
+# OPENAI_BASE_URL: URL endpoint (mặc định: https://api.openai.com/v1)
+# OPENAI_MODEL: Model name (mặc định: gpt-4o)
+DEFAULT_MODEL = "gpt-4o"
 MAX_TOKENS = 2000
 
 
 class LLMAnalyst:
-    def __init__(self):
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            logger.warning("ANTHROPIC_API_KEY chưa được set — LLM sẽ không hoạt động")
+    def __init__(self, api_key: str = None, base_url: str = None, model: str = None):
+        """
+        Khởi tạo LLM client với OpenAI-compatible API.
+        
+        Args:
+            api_key: API key (hoặc lấy từ OPENAI_API_KEY env)
+            base_url: Base URL cho API (hoặc lấy từ OPENAI_BASE_URL env)
+                      Ví dụ: "http://localhost:8000/v1" cho local LLM
+                             "https://api.openai.com/v1" cho OpenAI
+            model: Tên model (hoặc lấy từ OPENAI_MODEL env)
+        """
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
+        self.model = model or os.getenv("OPENAI_MODEL", DEFAULT_MODEL)
+        
+        if not self.api_key:
+            logger.warning("OPENAI_API_KEY chưa được set — LLM sẽ không hoạt động")
             self.client = None
             return
-        self.client = Anthropic(api_key=api_key)
+        
+        # Khởi tạo client với base_url nếu có (hỗ trợ custom endpoints)
+        client_kwargs = {"api_key": self.api_key}
+        if self.base_url:
+            client_kwargs["base_url"] = self.base_url
+            logger.info(f"Sử dụng custom endpoint: {self.base_url}")
+        
+        self.client = OpenAI(**client_kwargs)
+        logger.info(f"LLM initialized với model: {self.model}")
 
     def analyze(
         self,
@@ -38,16 +64,21 @@ class LLMAnalyst:
         """
         Phân tích đầy đủ — trả về dict với executive_summary, highlights, sections, v.v.
         """
+        if not self.client:
+            raise RuntimeError("LLM client chưa được khởi tạo (thiếu API key)")
+            
         prompt = build_analysis_prompt(data, result.metrics, result.flags, language, dupont=result.dupont, cashflow=result.cashflow, beneish=result.beneish)
 
         try:
-            response = self.client.messages.create(
-                model=MODEL,
+            response = self.client.chat.completions.create(
+                model=self.model,
                 max_tokens=MAX_TOKENS,
-                system=SYSTEM_FULL_ANALYSIS,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[
+                    {"role": "system", "content": SYSTEM_FULL_ANALYSIS},
+                    {"role": "user", "content": prompt}
+                ]
             )
-            raw = response.content[0].text.strip()
+            raw = response.choices[0].message.content.strip()
 
             # Clean JSON (đôi khi model thêm fence)
             if raw.startswith("```"):
@@ -80,19 +111,25 @@ class LLMAnalyst:
         """
         Q&A về báo cáo tài chính — trả về answer + cited_figures
         """
+        if not self.client:
+            raise RuntimeError("LLM client chưa được khởi tạo (thiếu API key)")
+            
         system, messages = build_chat_prompt(
             data, result.metrics, result.flags,
             question, history or []
         )
+        
+        # Convert sang format OpenAI messages
+        openai_messages = [{"role": "system", "content": system}]
+        openai_messages.extend(messages)
 
         try:
-            response = self.client.messages.create(
-                model=MODEL,
+            response = self.client.chat.completions.create(
+                model=self.model,
                 max_tokens=800,
-                system=system,
-                messages=messages
+                messages=openai_messages
             )
-            raw = response.content[0].text.strip()
+            raw = response.choices[0].message.content.strip()
 
             if raw.startswith("```"):
                 raw = raw.split("```")[1]
@@ -103,7 +140,7 @@ class LLMAnalyst:
 
         except json.JSONDecodeError:
             return {
-                "answer": response.content[0].text,
+                "answer": response.choices[0].message.content,
                 "cited_figures": [],
                 "confidence": "medium"
             }
