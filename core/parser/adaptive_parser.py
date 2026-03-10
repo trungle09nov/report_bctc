@@ -272,7 +272,7 @@ class AdaptiveMarkdownParser:
         for match in table_pattern.finditer(content):
             context_start = max(last_end, match.start() - 600)
             context_text = content[context_start:match.start()]
-            table_soup = BeautifulSoup(match.group(1), "lxml")
+            table_soup = BeautifulSoup(match.group(1), "html.parser")
             results.append((context_text, table_soup))
             last_end = match.end()
 

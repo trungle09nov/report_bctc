@@ -110,7 +110,7 @@ class MarkdownParser:
             context_text = content[context_start:match.start()]
 
             table_html = match.group(1)
-            soup = BeautifulSoup(table_html, "lxml")
+            soup = BeautifulSoup(table_html, "html.parser")
             results.append((context_text, soup))
             last_end = match.end()
 

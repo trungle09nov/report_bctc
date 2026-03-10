@@ -80,7 +80,7 @@ def test_schema_detector():
     </table>"""
 
     for name, html in [("HPG-style", hpg_html), ("Alt-style", alt_html), ("Embedded-code", embed_html)]:
-        soup = BeautifulSoup(html, "lxml")
+        soup = BeautifulSoup(html, "html.parser")
         schema = detector.detect(soup)
         print(f"\n  [{name}]")
         print(f"    code_col={schema.code_col} label_col={schema.label_col}")
