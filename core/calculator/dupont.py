@@ -14,7 +14,7 @@ Insight quan trọng:
 - ROE cao vì leverage cao → rủi ro lãi suất, refinancing
 - ROE cao vì asset turnover tốt → hiệu quả vốn
 """
-from models.report import ReportData
+from models.report import ReportData, AccountingStandard
 from models.metrics import FinancialMetrics, DuPontMetrics
 from core.parser.utils import to_billion, safe_divide
 
@@ -34,12 +34,21 @@ class DuPontCalculator:
         def bs_pb(code): return to_billion(bs_p.get(code))
         def inc_b(code): return to_billion(inc.get(code))
 
+        std = data.accounting_standard
+
         # ── Giá trị cần thiết ────────────────────────────────────────────────
         revenue        = m.revenue
         net_profit     = m.net_profit
-        pbt            = inc_b("50")                        # LNTT (mã 50)
-        ebit           = inc_b("30")                        # LN hoạt động ≈ EBIT
-        interest_exp   = inc_b("23")                        # Chi phí lãi vay
+
+        # PBT, EBIT, interest expense — code khác theo chuẩn kế toán
+        if std == AccountingStandard.TT210:
+            pbt          = inc_b("90")   # Tổng LNKT trước thuế
+            ebit         = inc_b("70")   # Kết quả HĐ trước thu nhập khác
+            interest_exp = inc_b("52")   # Chi phí lãi vay TT210
+        else:
+            pbt          = inc_b("50")   # LNTT (mã 50)
+            ebit         = inc_b("30")   # LN hoạt động ≈ EBIT
+            interest_exp = inc_b("23")   # Chi phí lãi vay TT200
 
         # EBIT điều chỉnh = LNTT + Lãi vay (nếu có)
         if pbt is not None and interest_exp is not None:
@@ -55,11 +64,14 @@ class DuPontCalculator:
         assets_avg  = self._avg(total_assets, total_assets_p)
         equity_avg  = self._avg(equity, equity_p)
 
+        # TT210 dùng YTD (cả năm) → không nhân ×4; TT200 dùng 1 quý → nhân ×4
+        annualize = 1 if std == AccountingStandard.TT210 else 4
+
         # ── DuPont 3 nhân tố ─────────────────────────────────────────────────
         d.net_margin       = safe_divide(net_profit, revenue)                   # LNST/DT
         d.asset_turnover   = safe_divide(revenue, assets_avg)                   # DT/TS
         if d.asset_turnover:
-            d.asset_turnover *= 4                                                # Annualize quarterly
+            d.asset_turnover *= annualize                                        # Annualize
         d.equity_multiplier = safe_divide(assets_avg, equity_avg)               # TS/VCSH
 
         if all(v is not None for v in [d.net_margin, d.asset_turnover, d.equity_multiplier]):

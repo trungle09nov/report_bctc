@@ -2,7 +2,7 @@
 Calculator module — Python tính toán tất cả chỉ số tài chính
 LLM chỉ nhận kết quả và diễn giải, KHÔNG tự tính
 """
-from models.report import ReportData, ReportType
+from models.report import ReportData, ReportType, AccountingStandard
 from models.metrics import FinancialMetrics
 from core.parser.utils import to_billion, safe_divide, safe_growth
 
@@ -19,6 +19,7 @@ class FinancialCalculator:
     def calculate(self, data: ReportData) -> FinancialMetrics:
         m = FinancialMetrics()
 
+        std = data.accounting_standard
         bs = data.balance_sheet_current
         bs_p = data.balance_sheet_prev
         inc = data.income_current
@@ -32,27 +33,47 @@ class FinancialCalculator:
         def inc_pb(code): return to_billion(inc_p.get(code))
         def cf_b(code): return to_billion(cf.get(code))
 
-        # ── Raw figures ───────────────────────────────────────────────────────
-        m.revenue = inc_b("10") or inc_b("01")
-        m.revenue_prev = inc_pb("10") or inc_pb("01")
-        m.gross_profit = inc_b("20")
-        m.operating_profit = inc_b("30")
-        m.net_profit = inc_b("60")
-        m.net_profit_prev = inc_pb("60")
+        # ── Raw figures theo chuẩn kế toán ───────────────────────────────────
+        if std == AccountingStandard.TT210:
+            # Thông tư 210 — công ty chứng khoán
+            m.revenue = inc_b("20")          # Cộng doanh thu hoạt động
+            m.revenue_prev = inc_pb("20")
+            m.gross_profit = None            # Không áp dụng
+            m.operating_profit = inc_b("70") # Kết quả HĐ (VI.)
+            if m.operating_profit is None:
+                # Fallback: tổng doanh thu - tổng chi phí
+                rev = inc_b("20") or 0
+                exp = inc_b("40") or 0
+                m.operating_profit = (rev - exp) if (rev or exp) else None
+            m.net_profit = inc_b("200")      # Lợi nhuận kế toán sau thuế
+            m.net_profit_prev = inc_pb("200")
+            m.cash = bs_b("111")             # Tiền và tương đương tiền
+            m.inventory = None               # Không áp dụng
+            m.trade_receivables = bs_b("117") or bs_b("119")
+            m.capex = abs(cf_b("61") or 0) or None  # Tiền chi mua TSCĐ
+            # Không có subsidiary_income cho TT210 theo cách tương tự
+        else:
+            # Thông tư 200/202 — doanh nghiệp thông thường (mặc định)
+            m.revenue = inc_b("10") or inc_b("01")
+            m.revenue_prev = inc_pb("10") or inc_pb("01")
+            m.gross_profit = inc_b("20")
+            m.operating_profit = inc_b("30")
+            m.net_profit = inc_b("60")
+            m.net_profit_prev = inc_pb("60")
+            m.cash = bs_b("110")
+            m.inventory = bs_b("140")
+            m.trade_receivables = bs_b("131")
+            m.capex = abs(cf_b("21") or 0) or None
+
+            # Subsidiary income (đặc thù holding company)
+            financial_income = inc_b("21")
+            if data.is_holding_company and financial_income:
+                m.subsidiary_income = financial_income
+
+        # ── Common BS fields (giống nhau cho TT200 và TT210) ─────────────────
         m.total_assets = bs_b("270")
         m.total_liabilities = bs_b("300")
         m.equity = bs_b("400") or bs_b("410")
-        m.cash = bs_b("110")
-        m.inventory = bs_b("140")
-        m.trade_receivables = bs_b("131")
-        m.capex = abs(cf_b("21") or 0) or None
-
-        # Subsidiary income (đặc thù holding company)
-        # Lợi nhuận công ty con chuyển về (nằm trong doanh thu tài chính - mã 21)
-        # Cần tính riêng từ thuyết minh nếu có, tạm dùng financial_income
-        financial_income = inc_b("21")
-        if data.is_holding_company and financial_income:
-            m.subsidiary_income = financial_income
 
         # ── Lợi nhuận ─────────────────────────────────────────────────────────
         m.gross_margin = safe_divide(m.gross_profit, m.revenue)
@@ -71,13 +92,17 @@ class FinancialCalculator:
         equity_avg = self._average(m.equity, to_billion(bs_p.get("400") or bs_p.get("410")))
         assets_avg = self._average(m.total_assets, to_billion(bs_p.get("270")))
 
+        # TT210 income dùng YTD (lũy kế cả năm) → không nhân ×4
+        # TT200 dùng số liệu của 1 quý → nhân ×4 để annualize
+        annualize = 1 if std == AccountingStandard.TT210 else 4
+
         m.roe = safe_divide(m.net_profit, equity_avg)
         if m.roe:
-            m.roe = m.roe * 4 * 100  # Annualize quarterly (×4), convert to %
+            m.roe = m.roe * annualize * 100
 
         m.roa = safe_divide(m.net_profit, assets_avg)
         if m.roa:
-            m.roa = m.roa * 4 * 100
+            m.roa = m.roa * annualize * 100
 
         # ── Thanh khoản ───────────────────────────────────────────────────────
         current_assets = bs_b("100")
@@ -96,7 +121,10 @@ class FinancialCalculator:
 
         # Interest coverage = EBIT / Interest expense
         # EBIT ≈ operating_profit (trước thuế và lãi vay)
-        interest_expense = inc_b("23")
+        # TT200: lãi vay = code "23"; TT210: chi phí lãi vay = code "52"
+        interest_expense = (
+            inc_b("52") if std == AccountingStandard.TT210 else inc_b("23")
+        )
         if m.operating_profit and interest_expense and interest_expense != 0:
             m.interest_coverage = safe_divide(m.operating_profit, interest_expense)
 
@@ -112,7 +140,7 @@ class FinancialCalculator:
         # Asset turnover = DT / Tổng TS bình quân
         m.asset_turnover = safe_divide(m.revenue, assets_avg)
         if m.asset_turnover:
-            m.asset_turnover = m.asset_turnover * 4  # Annualize
+            m.asset_turnover = m.asset_turnover * annualize
 
         # ── Tăng trưởng ───────────────────────────────────────────────────────
         m.revenue_growth_yoy = safe_growth(m.revenue, m.revenue_prev)

@@ -9,6 +9,13 @@ class ReportType(Enum):
     UNKNOWN = "unknown"
 
 
+class AccountingStandard(Enum):
+    TT200 = "tt200"     # Thông tư 200/202 — doanh nghiệp thông thường
+    TT210 = "tt210"     # Thông tư 210/2014 — công ty chứng khoán (SSI, VND, HCM...)
+    TT49  = "tt49"      # Thông tư 49/2014 → TT09/2023 — ngân hàng (VCB, TCB, MBB...)
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class FinancialSection:
     """Một khoản mục trong BCTC — key là mã số (VD: '270'), value là số tiền VND"""
@@ -27,6 +34,7 @@ class ReportData:
     company_code: str = ""          # VD: HPG
     period: str = ""                # VD: Q4/2025
     report_type: ReportType = ReportType.UNKNOWN
+    accounting_standard: AccountingStandard = AccountingStandard.UNKNOWN
     report_date: str = ""           # Ngày lập báo cáo
     source_file: str = ""
 
@@ -57,7 +65,9 @@ class ReportData:
         """Detect holding company: đầu tư vào công ty con > 70% tổng tài sản"""
         bs = self.balance_sheet_current
         total_assets = bs.get("270")
-        subsidiary_investment = bs.get("251")
+        # TT200: code 251 = investment in subsidiaries
+        # TT210: code 212.2 = đầu tư vào công ty con
+        subsidiary_investment = bs.get("251") or bs.get("212.2")
         if total_assets and total_assets > 0:
             return (subsidiary_investment / total_assets) > 0.7
         return False
@@ -68,6 +78,7 @@ class ReportData:
             "company_code": self.company_code,
             "period": self.period,
             "report_type": self.report_type.value,
+            "accounting_standard": self.accounting_standard.value,
             "report_date": self.report_date,
             "is_consolidated": self.is_consolidated,
             "is_holding_company": self.is_holding_company,

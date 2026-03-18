@@ -92,3 +92,5 @@ datasets/
 # Docker
 *.tar
 docker-compose.override.yml
+
+OCR

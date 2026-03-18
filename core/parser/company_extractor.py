@@ -98,7 +98,8 @@ class CompanyExtractor:
             m = re.search(pattern, content[:2000], re.IGNORECASE)
             if m:
                 name = m.group(1).strip()
-                # Làm sạch: bỏ dấu chấm cuối, giới hạn độ dài
+                # Làm sạch: bỏ markdown bold markers và dấu cuối
+                name = name.replace('**', '').replace('*', '').strip()
                 name = re.sub(r'[\.\,\;]+$', '', name).strip()
                 if 5 < len(name) < 100:
                     return name

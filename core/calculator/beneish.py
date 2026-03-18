@@ -23,7 +23,7 @@ thị trường vốn kém minh bạch hơn → ngưỡng có thể cần điề
 Bot sẽ trình bày score + thành phần, không đưa kết luận tuyệt đối.
 """
 import math
-from models.report import ReportData
+from models.report import ReportData, AccountingStandard
 from models.metrics import FinancialMetrics, BeneishScore
 from core.parser.utils import to_billion, safe_divide
 
@@ -56,13 +56,21 @@ class BeneishCalculator:
         def inc_b(code):  return to_billion(inc.get(code))
         def inc_pb(code): return to_billion(inc_p.get(code))
 
+        std = data.accounting_standard
+
         # ── Các giá trị cần thiết ────────────────────────────────────────────
         rev_t   = m.revenue
         rev_t1  = m.revenue_prev
         gp_t    = m.gross_profit
-        gp_t1   = inc_pb("20")
-        ar_t    = to_billion(bs.get("131"))
-        ar_t1   = to_billion(bs_p.get("131"))
+        gp_t1   = inc_pb("20") if std != AccountingStandard.TT210 else None
+
+        # AR: TT200 = code 131, TT210 = code 117 (phải thu bán TSTC)
+        if std == AccountingStandard.TT210:
+            ar_t  = to_billion(bs.get("117")) or to_billion(bs.get("119"))
+            ar_t1 = to_billion(bs_p.get("117")) or to_billion(bs_p.get("119"))
+        else:
+            ar_t  = to_billion(bs.get("131"))
+            ar_t1 = to_billion(bs_p.get("131"))
         ta_t    = m.total_assets
         ta_t1   = to_billion(bs_p.get("270"))
         ca_t    = to_billion(bs.get("100"))

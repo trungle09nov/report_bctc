@@ -18,7 +18,7 @@ Earnings Quality:
     Cash conversion = CFO / LNST
         → > 1.0 rất tốt, < 0.5 đáng lo
 """
-from models.report import ReportData
+from models.report import ReportData, AccountingStandard
 from models.metrics import FinancialMetrics, CashFlowMetrics
 from core.parser.utils import to_billion, safe_divide, safe_growth
 
@@ -30,6 +30,7 @@ class CashFlowCalculator:
     def calculate(self, data: ReportData, m: FinancialMetrics) -> CashFlowMetrics:
         cf_m = CashFlowMetrics()
 
+        std   = data.accounting_standard
         bs    = data.balance_sheet_current
         bs_p  = data.balance_sheet_prev
         inc   = data.income_current
@@ -42,44 +43,53 @@ class CashFlowCalculator:
         def cf_b(code):   return to_billion(cf.get(code))
         def cf_pb(code):  return to_billion(cf_p.get(code))
 
-        cogs    = inc_b("11")
         revenue = m.revenue
 
         # ── CCC Components ────────────────────────────────────────────────────
+        if std == AccountingStandard.TT210:
+            # TT210: không có hàng tồn kho, AR khác code
+            ar   = to_billion(bs.get("117")) or to_billion(bs.get("119"))
+            inv  = None
+            cogs = None
+            ap   = to_billion(bs.get("320"))  # Phải trả người bán ngắn hạn
+        else:
+            cogs = inc_b("11")
+            ar   = to_billion(bs.get("131"))
+            inv  = to_billion(bs.get("140"))
+            ap   = to_billion(bs.get("312"))
 
         # DSO = (AR / Revenue) × days
-        ar = to_billion(bs.get("131"))
         cf_m.dso = self._days_ratio(ar, revenue)
 
         # DIO = (Inventory / COGS) × days
-        inv = to_billion(bs.get("140"))
         cf_m.dio = self._days_ratio(inv, cogs)
 
         # DPO = (Trade Payables / COGS) × days
-        # Mã 312 = Phải trả người bán ngắn hạn
-        ap = to_billion(bs.get("312"))
         cf_m.dpo = self._days_ratio(ap, cogs)
 
         if all(v is not None for v in [cf_m.dso, cf_m.dio, cf_m.dpo]):
             cf_m.ccc = round(cf_m.dso + cf_m.dio - cf_m.dpo, 1)
         elif cf_m.dso is not None and cf_m.dio is not None:
-            # Thiếu DPO thì tính phần DSO + DIO
             cf_m.ccc = round(cf_m.dso + cf_m.dio, 1)
+        elif cf_m.dso is not None:
+            cf_m.ccc = cf_m.dso
 
         # ── Free Cash Flow ────────────────────────────────────────────────────
+        # CFO: TT200 = mã "20", TT210 = mã "60"
+        cfo_code      = "60" if std == AccountingStandard.TT210 else "20"
+        capex_code    = "61" if std == AccountingStandard.TT210 else "21"
 
-        # CFO = mã 20 trong LCTT
-        cfo = cf_b("20")
+        cfo = cf_b(cfo_code)
         cf_m.cfo = cfo
 
-        cfo_prev = cf_pb("20")
+        cfo_prev = cf_pb(cfo_code)
         cf_m.cfo_prev = cfo_prev
         cf_m.cfo_growth = safe_growth(cfo, cfo_prev)
         if cf_m.cfo_growth:
             cf_m.cfo_growth = round(cf_m.cfo_growth, 1)
 
-        # Capex = mã 21 (mua TSCĐ) — lấy absolute value vì thường âm
-        capex_raw = cf_b("21")
+        # Capex — lấy absolute value vì thường âm
+        capex_raw = cf_b(capex_code)
         capex = abs(capex_raw) if capex_raw is not None else m.capex
         cf_m.capex_total = capex
 

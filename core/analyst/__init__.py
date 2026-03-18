@@ -3,6 +3,7 @@ FinBotService — orchestrator chính
 Pipeline: Parser → Calculator → DuPont → CashFlow → Beneish → AnomalyDetector → LLMAnalyst
 """
 import logging
+import os
 from pathlib import Path
 
 from models.report import ReportData
@@ -26,7 +27,7 @@ class FinBotService:
         self.cf_calc     = CashFlowCalculator()
         self.beneish_calc = BeneishCalculator()
         self.detector    = AnomalyDetector()
-        self.analyst     = LLMAnalyst() if use_llm else None
+        self.analyst     = LLMAnalyst() if (use_llm and os.getenv("OPENAI_API_KEY")) else None
 
     def parse_file(self, file_path: str) -> ReportData:
         path = Path(file_path)

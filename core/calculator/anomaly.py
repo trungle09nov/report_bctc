@@ -2,7 +2,7 @@
 Anomaly detection — phát hiện các bất thường trong BCTC
 Rule-based, deterministic — không dùng LLM để đảm bảo nhất quán
 """
-from models.report import ReportData
+from models.report import ReportData, AccountingStandard
 from models.metrics import FinancialMetrics
 from models.flag import Flag, FlagType
 from core.parser.utils import to_billion, safe_growth
@@ -66,8 +66,12 @@ class AnomalyDetector:
         bs = data.balance_sheet_current
         bs_p = data.balance_sheet_prev
 
-        ar_current = to_billion(bs.get("131"))
-        ar_prev = to_billion(bs_p.get("131"))
+        if data.accounting_standard == AccountingStandard.TT210:
+            ar_current = to_billion(bs.get("117")) or to_billion(bs.get("119"))
+            ar_prev = to_billion(bs_p.get("117")) or to_billion(bs_p.get("119"))
+        else:
+            ar_current = to_billion(bs.get("131"))
+            ar_prev = to_billion(bs_p.get("131"))
 
         ar_growth = safe_growth(ar_current, ar_prev)
         rev_growth = metrics.revenue_growth_yoy
@@ -211,17 +215,34 @@ class AnomalyDetector:
 
     def detect_advanced(self, data, metrics, cf_metrics, beneish) -> list[Flag]:
         """Anomaly rules nâng cao dùng CashFlowMetrics và BeneishScore"""
+        std = getattr(data, 'accounting_standard', None)
         flags = []
-        flags.extend(self._check_earnings_quality(metrics, cf_metrics))
-        flags.extend(self._check_fcf(metrics, cf_metrics))
+        flags.extend(self._check_earnings_quality(metrics, cf_metrics, std))
+        flags.extend(self._check_fcf(metrics, cf_metrics, std))
         flags.extend(self._check_ccc(cf_metrics))
         flags.extend(self._check_beneish(beneish))
         return flags
 
-    def _check_earnings_quality(self, metrics, cf_metrics) -> list[Flag]:
+    def _check_earnings_quality(self, metrics, cf_metrics, std=None) -> list[Flag]:
+        from models.report import AccountingStandard
         flags = []
         if cf_metrics is None:
             return flags
+
+        # TT210 (công ty chứng khoán): CFO âm là bình thường do tiền trading
+        if std == AccountingStandard.TT210 and cf_metrics.cfo is not None and cf_metrics.cfo < 0:
+            flags.append(Flag(
+                type=FlagType.INFO,
+                code="TT210_NEGATIVE_CFO_NORMAL",
+                message=(
+                    f"CFO âm ({cf_metrics.cfo:.0f} tỷ) — bình thường với công ty chứng khoán. "
+                    "Hoạt động tự doanh (mua TSTC, cho vay margin) tạo ra dòng tiền âm từ HĐKD "
+                    "trong khi lợi nhuận ghi nhận trước khi tiền về. "
+                    "Không nên đánh giá chất lượng lợi nhuận dựa trên CFO cho TT210."
+                ),
+                detail={"cfo_bil": cf_metrics.cfo, "net_profit_bil": metrics.net_profit}
+            ))
+            return flags  # Skip các check CFO khác cho TT210
 
         # Cash conversion < 0.5 → lợi nhuận phần lớn là accruals
         if cf_metrics.cash_conversion is not None and cf_metrics.cash_conversion < 0.5:
@@ -264,9 +285,14 @@ class AnomalyDetector:
             ))
         return flags
 
-    def _check_fcf(self, metrics, cf_metrics) -> list[Flag]:
+    def _check_fcf(self, metrics, cf_metrics, std=None) -> list[Flag]:
+        from models.report import AccountingStandard
         flags = []
         if cf_metrics is None or cf_metrics.fcf is None:
+            return flags
+
+        # TT210: FCF âm bình thường do CFO âm từ trading
+        if std == AccountingStandard.TT210:
             return flags
 
         if cf_metrics.fcf < 0 and metrics.net_profit and metrics.net_profit > 0:

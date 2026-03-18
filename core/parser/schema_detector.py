@@ -39,8 +39,10 @@ class TableSchemaDetector:
     CODE_PATTERN = re.compile(r'^\d{1,3}[a-zA-Z]?$')
 
     # Patterns mã số nhúng trong tên: "111. Tiền" hoặc "111 Tiền" hoặc "(111)"
+    # Dùng negative lookahead (?!\d) để tránh nhận nhầm số VND (88.394.418...)
+    # làm code nhúng — "88.394..." bị loại vì sau "." là digit "3"
     EMBEDDED_CODE_PATTERN = re.compile(
-        r'^[\(\[]?(\d{1,3}[a-zA-Z]?)[\.\)\]\s]'
+        r'^[\(\[]?(\d{1,3}[a-zA-Z]?)(?:[)\]\s]|\.(?!\d))'
     )
 
     # Patterns nhận diện header cột thời gian
@@ -65,7 +67,8 @@ class TableSchemaDetector:
         header_schema = self._detect_from_header(rows)
 
         # Bước 2: Scan data rows để xác nhận/tìm cột mã số
-        data_schema = self._detect_from_data_rows(rows[1:5])  # Xem 5 rows đầu
+        # Dùng 10 rows đầu (sau header) để xử lý bảng TT210 có nhiều sub-row
+        data_schema = self._detect_from_data_rows(rows[1:10])
 
         # Bước 3: Merge kết quả, ưu tiên header nếu có
         return self._merge(header_schema, data_schema)
@@ -213,7 +216,17 @@ class TableSchemaDetector:
             # Bỏ qua code_col và label_col, lấy 2 cột cuối còn lại
             taken = {code_col, label_col}
             remaining = [i for i in range(total_cols) if i not in taken]
-            if len(remaining) >= 2:
+
+            # Lọc cột thừa cuối bảng: với bảng TT210 income có 8 cột,
+            # cột cuối thường là blank/empty padding
+            # Heuristic: nếu còn >= 5 cột sau khi bỏ code+label, bỏ 2 cột đầu nữa
+            # (thường là label-phụ và thuyết minh), rồi lấy 2 cột cuối trong 4 cột còn lại
+            if len(remaining) >= 6:
+                # Bảng nhiều cột: bỏ trailing blank column
+                # Lấy remaining[-3] và remaining[-2] (bỏ cột cuối cùng = blank)
+                value_col = remaining[-3] if value_col is None else value_col
+                prev_col = remaining[-2] if prev_col is None else prev_col
+            elif len(remaining) >= 2:
                 # Thường: [label, code, thuyết_minh, current, prev]
                 # hoặc:   [code, label, thuyết_minh, current, prev]
                 value_col = remaining[-2] if value_col is None else value_col
