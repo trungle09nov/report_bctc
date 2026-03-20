@@ -294,6 +294,133 @@ TT210_CASHFLOW_MAPPING = {
     "103": "closing_cash",
 }
 
+# ══════════════════════════════════════════════════════════════════════════════
+# THÔNG TƯ 49/2014 → TT09/2023 — Ngân hàng thương mại (VCB, TCB, MBB, VPB...)
+# BCTC ngân hàng không có cột mã số chuẩn như TT200/TT210
+# → dùng keyword matching trên nhãn dòng để nhận diện khoản mục
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Kết quả kinh doanh ngân hàng — keyword → semantic key
+# Thứ tự quan trọng: key cụ thể hơn phải đứng TRƯỚC key chung hơn
+TT49_INCOME_KEYWORDS: dict[str, list[str]] = {
+    # NII phải match TRƯỚC "thu nhập lãi" để tránh false match
+    "net_interest_income":    ["thu nhập lãi thuần"],
+    "interest_income":        [
+        "thu nhập lãi và các khoản thu nhập tương tự",  # MBB format
+        "thu nhập lãi và các khoản tương tự",
+        "thu nhập từ lãi và",
+    ],
+    "interest_expense":       [
+        "chi phí lãi và các khoản chi phí tương tự",    # MBB format
+        "chi phí lãi và các khoản tương tự",
+        "chi phí lãi và",
+    ],
+    "net_fee_income":         ["lãi thuần từ hoạt động dịch vụ"],
+    "fee_income":             ["thu nhập từ hoạt động dịch vụ"],
+    # fee_expense PHẢI trước operating_expense để tránh "chi phí hoạt động" bắt nhầm
+    "fee_expense":            [
+        "chi phí hoạt động dịch vụ",   # MBB format (không có "từ")
+        "chi phí từ hoạt động dịch vụ",
+    ],
+    "fx_trading":             ["lãi thuần từ hoạt động kinh doanh ngoại hối"],
+    "trading_sec_gains":      ["lãi thuần từ mua bán chứng khoán kinh doanh"],
+    "invest_sec_gains":       ["lãi thuần từ mua bán chứng khoán đầu tư"],
+    # net_other_income: bắt cả "kinh doanh khác" (MBB) và "hoạt động khác"
+    "net_other_income":       [
+        "lãi thuần từ hoạt động kinh doanh khác",  # MBB format
+        "lãi thuần từ hoạt động khác",
+    ],
+    "other_income":           ["thu nhập từ hoạt động khác"],
+    "other_expense":          ["chi phí từ hoạt động khác"],
+    "equity_income":          [
+        "thu nhập từ góp vốn, mua cổ phần",   # MBB format (có dấu phẩy)
+        "thu nhập từ góp vốn mua cổ phần",
+        "lãi từ góp vốn",
+    ],
+    "total_operating_income": ["tổng thu nhập hoạt động", "thu nhập hoạt động thuần"],
+    # operating_expense: chỉ dùng "tổng chi phí" để tránh bắt nhầm "chi phí hoạt động dịch vụ"
+    "operating_expense":      ["tổng chi phí hoạt động"],
+    "pre_provision_profit":   [
+        "lợi nhuận thuần từ hoạt động kinh doanh trước chi phí dự phòng",
+        "lợi nhuận trước dự phòng rủi ro tín dụng",
+        "lợi nhuận thuần trước dự phòng",
+        "lợi nhuận từ hoạt động kinh doanh trước chi phí",
+    ],
+    "loan_loss_provision":    [
+        "chi phí dự phòng rủi ro tín dụng",
+        "chi phí dự phòng rủi ro",      # MBB format (không có "tín dụng")
+        "dự phòng rủi ro tín dụng",
+        "chi phí dự phòng tín dụng",
+    ],
+    "pbt":                    ["tổng lợi nhuận trước thuế", "lợi nhuận trước thuế"],
+    "income_tax":             [
+        "chi phí thuế tndn trong kỳ",            # MBB format
+        "chi phí thuế thu nhập doanh nghiệp",
+        "thuế thu nhập doanh nghiệp",
+    ],
+    "pat":                    ["lợi nhuận sau thuế"],
+    "minority_profit":        ["lợi ích của cổ đông không kiểm soát", "lợi nhuận cổ đông thiểu số"],
+    "parent_profit":          ["lợi nhuận sau thuế của cổ đông công ty mẹ", "thuộc về cổ đông mẹ"],
+}
+
+# Bảng cân đối kế toán ngân hàng — keyword → semantic key
+# Thứ tự: key cụ thể (dài hơn) TRƯỚC key chung (ngắn hơn)
+TT49_BALANCE_SHEET_KEYWORDS: dict[str, list[str]] = {
+    # TÀI SẢN
+    "cash_gold":              ["tiền mặt, vàng bạc, đá quý", "tiền mặt và vàng", "tiền mặt,vàng"],
+    "deposits_sbv":           ["tiền gửi tại ngân hàng nhà nước"],
+    "interbank_assets":       [
+        "tiền, vàng gửi và cho vay các tổ chức tín dụng",  # MBB format
+        "tiền gửi tại và cho vay các tổ chức tín dụng khác",
+        "tiền gửi và cho vay các tctd khác",
+        "tiền gửi và cho vay tổ chức tín dụng",
+    ],
+    "trading_securities_bs":  ["chứng khoán kinh doanh"],
+    "derivatives_assets":     ["công cụ tài chính phái sinh và các tài sản tài chính"],
+    # loan_provisions TRƯỚC loans_gross: "dự phòng rủi ro cho vay khách hàng" chứa "cho vay khách hàng"
+    "loan_provisions":        [
+        "dự phòng rủi ro cho vay và ứng trước",
+        "dự phòng rủi ro cho vay khách hàng",
+        "dự phòng rủi ro cho vay",
+    ],
+    "loans_gross":            [
+        "cho vay và ứng trước khách hàng",
+        "cho vay khách hàng",
+        "dư nợ cho vay khách hàng",
+    ],
+    "investment_securities":  ["chứng khoán đầu tư"],
+    "long_term_investments":  ["góp vốn, đầu tư dài hạn", "đầu tư dài hạn"],
+    "fixed_assets":           ["tài sản cố định"],
+    "investment_property":    ["bất động sản đầu tư"],
+    "other_assets":           ["tài sản có khác", "tài sản khác"],
+    "total_assets":           ["tổng tài sản có", "tổng tài sản", "tổng cộng tài sản"],
+    # NỢ PHẢI TRẢ
+    "sbv_borrowings":         [
+        "các khoản nợ chính phủ và nhnn",
+        "các khoản nợ chính phủ và ngân hàng nhà nước",
+        "nợ chính phủ và nhnn",
+        "vay ngân hàng nhà nước",
+    ],
+    "interbank_liabilities":  [
+        "tiền gửi và vay các tctd khác",           # MBB format (viết tắt TCTD)
+        "tiền gửi và vay các tổ chức tín dụng khác",
+    ],
+    "customer_deposits":      ["tiền gửi của khách hàng", "tiền gửi khách hàng"],
+    "derivatives_liabilities":["công cụ tài chính phái sinh và các khoản nợ tài chính"],
+    "trust_funds":            ["vốn tài trợ, ủy thác đầu tư"],
+    "issued_securities":      ["phát hành giấy tờ có giá"],
+    "other_liabilities":      ["các khoản nợ khác"],
+    # total_liabilities_equity TRƯỚC total_liabilities để tránh "tổng nợ phải trả" bắt nhầm
+    "total_liabilities_equity": ["tổng nợ phải trả và vốn chủ sở hữu", "tổng nguồn vốn"],
+    "total_liabilities":      ["tổng nợ phải trả"],
+    # VỐN CHỦ SỞ HỮU
+    "charter_capital_bs":     ["vốn điều lệ"],
+    "retained_earnings_bs":   ["lợi nhuận chưa phân phối"],
+    # equity: chỉ dùng "tổng vốn chủ sở hữu" để tránh bắt nhầm "tổng nợ phải trả VÀ vốn chủ sở hữu"
+    "equity":                 ["tổng vốn chủ sở hữu"],
+    "minority_interest_bs":   ["lợi ích của cổ đông không kiểm soát", "cổ đông thiểu số"],
+}
+
 # ── Reverse mappings (label → mã số) ─────────────────────────────────────────
 BS_REVERSE = {v: k for k, v in BALANCE_SHEET_MAPPING.items()}
 IS_REVERSE = {v: k for k, v in INCOME_STMT_MAPPING.items()}
@@ -311,9 +438,11 @@ def get_cf_label(code: str) -> str:
 
 
 def get_mappings_for_standard(standard) -> tuple[dict, dict, dict]:
-    """Trả về (bs_mapping, income_mapping, cf_mapping) theo chuẩn kế toán."""
+    """Trả về (bs_mapping, income_mapping, cf_mapping) theo chuẩn kế toán.
+    TT49: trả về TT200 làm fallback — parser sẽ dùng keyword matching riêng.
+    """
     from models.report import AccountingStandard
     if standard == AccountingStandard.TT210:
         return TT210_BALANCE_SHEET_MAPPING, TT210_INCOME_MAPPING, TT210_CASHFLOW_MAPPING
-    # TT200/202 và mặc định
+    # TT200/202/TT49 và mặc định
     return BALANCE_SHEET_MAPPING, INCOME_STMT_MAPPING, CASHFLOW_MAPPING

@@ -3,7 +3,7 @@ System prompts cho các tình huống phân tích khác nhau
 """
 
 SYSTEM_FULL_ANALYSIS = """Bạn là chuyên gia phân tích tài chính cấp cao chuyên về thị trường chứng khoán Việt Nam.
-Bạn có kiến thức sâu về chuẩn mực kế toán VAS (Thông tư 200, 202), đặc thù ngành thép, và thị trường vốn Việt Nam.
+Bạn có kiến thức sâu về chuẩn mực kế toán VAS (Thông tư 200, 202, 210, 49/TT09), đặc thù các ngành sản xuất, chứng khoán, ngân hàng, và thị trường vốn Việt Nam.
 
 ## QUY TẮC BẮT BUỘC
 1. KHÔNG tự tính toán số liệu — tất cả chỉ số đã được tính sẵn và truyền vào cho bạn. Hãy dùng trực tiếp.
@@ -12,6 +12,8 @@ Bạn có kiến thức sâu về chuẩn mực kế toán VAS (Thông tư 200, 
 4. Với holding company: giải thích rõ bản chất, không áp các chỉ số vận hành thông thường
 5. Luôn đề cập các flags/bất thường đã phát hiện trong phần rủi ro
 6. Câu văn ngắn gọn, rõ ràng, tránh hoa mỹ
+7. Với ngân hàng (TT49): ưu tiên phân tích NIM, CIR, LDR, tăng trưởng tín dụng/huy động thay vì gross margin/inventory
+8. Với ngân hàng: "revenue" trong metrics = Tổng thu nhập hoạt động (TOI), "operating_profit" = PPOP
 
 ## FORMAT ĐẦU RA
 Trả về JSON hợp lệ (không có markdown fence, không có text ngoài JSON):
@@ -61,7 +63,7 @@ Trả về JSON:
 }"""
 
 
-def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=None, cashflow=None, beneish=None) -> str:
+def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=None, cashflow=None, beneish=None, banking=None) -> str:
     """Build user prompt với data đã tính sẵn"""
     import json
 
@@ -94,12 +96,14 @@ def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=Non
     dupont_str = json.dumps(dupont.to_dict(), ensure_ascii=False, indent=2) if dupont else "Không có"
     cf_str = json.dumps(cashflow.to_dict(), ensure_ascii=False, indent=2) if cashflow else "Không có"
     beneish_str = json.dumps(beneish.to_dict(), ensure_ascii=False, indent=2) if beneish else "Không có"
+    banking_str = json.dumps(banking.to_dict(), ensure_ascii=False, indent=2) if banking else "Không có"
 
     prompt = f"""Phân tích báo cáo tài chính sau:
 
 ## THÔNG TIN BÁO CÁO
 - Công ty: {data.company_name} ({data.company_code})
 - Kỳ: {data.period}
+- Chuẩn kế toán: {data.accounting_standard.value.upper()} ({"Ngân hàng TT49" if data.accounting_standard.value == "tt49" else "Chứng khoán TT210" if data.accounting_standard.value == "tt210" else "Doanh nghiệp TT200/202"})
 - Loại báo cáo: {"Hợp nhất (Consolidated)" if data.is_consolidated else "Công ty mẹ riêng lẻ (Parent Only)"}
 - Holding company: {"CÓ — chủ yếu đầu tư vào công ty con" if data.is_holding_company else "Không"}
 
@@ -123,6 +127,9 @@ def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=Non
 
 ## BENEISH M-SCORE (phát hiện làm đẹp BCTC)
 {beneish_str}
+
+## CHỈ SỐ NGÂN HÀNG CHUYÊN BIỆT (NIM, LDR, CIR, credit cost — chỉ có với TT49)
+{banking_str}
 
 ## THUYẾT MINH (trích)
 {data.notes_text[:1000] if data.notes_text else "Không có"}

@@ -14,6 +14,7 @@ from core.calculator.dupont import DuPontCalculator
 from core.calculator.cashflow import CashFlowCalculator
 from core.calculator.beneish import BeneishCalculator
 from core.calculator.anomaly import AnomalyDetector
+from core.calculator.banking import BankingCalculator
 from core.analyst.llm import LLMAnalyst
 
 logger = logging.getLogger(__name__)
@@ -21,13 +22,14 @@ logger = logging.getLogger(__name__)
 
 class FinBotService:
     def __init__(self, use_llm: bool = True):
-        self.parser      = AdaptiveMarkdownParser()
-        self.calculator  = FinancialCalculator()
-        self.dupont_calc = DuPontCalculator()
-        self.cf_calc     = CashFlowCalculator()
+        self.parser       = AdaptiveMarkdownParser()
+        self.calculator   = FinancialCalculator()
+        self.dupont_calc  = DuPontCalculator()
+        self.cf_calc      = CashFlowCalculator()
         self.beneish_calc = BeneishCalculator()
-        self.detector    = AnomalyDetector()
-        self.analyst     = LLMAnalyst() if (use_llm and os.getenv("OPENAI_API_KEY")) else None
+        self.banking_calc = BankingCalculator()
+        self.detector     = AnomalyDetector()
+        self.analyst      = LLMAnalyst() if (use_llm and os.getenv("OPENAI_API_KEY")) else None
 
     def parse_file(self, file_path: str) -> ReportData:
         path = Path(file_path)
@@ -43,35 +45,75 @@ class FinBotService:
 
     def calculate(self, data: ReportData) -> AnalysisResult:
         """Full calculation pipeline — không gọi LLM"""
+        from models.report import AccountingStandard
+
         # 1. Chỉ số cơ bản
         metrics = self.calculator.calculate(data)
 
-        # 2. DuPont decomposition
+        # 2. Banking metrics (chỉ cho TT49)
+        banking = None
+        if data.accounting_standard == AccountingStandard.TT49:
+            try:
+                banking = self.banking_calc.calculate(data, metrics)
+            except Exception as e:
+                logger.warning(f"Banking calc error: {e}")
+
+
+
+        # 3. DuPont decomposition (luôn trả về object, nếu không áp dụng thì các trường None)
         try:
             dupont = self.dupont_calc.calculate(data, metrics)
         except Exception as e:
             logger.warning(f"DuPont calc error: {e}")
-            dupont = None
+            from models.metrics import DuPontMetrics
+            dupont = DuPontMetrics()  # object rỗng
+        # Nếu là TT49, trả về dict với not_applicable/note thay vì object
+        if data.accounting_standard == AccountingStandard.TT49:
+            dupont = {
+                "not_applicable": True,
+                "note": "DuPont analysis not applicable for banks (TT49)"
+            }
 
-        # 3. Cash flow quality & CCC
+        # 4. Cash flow quality & CCC (luôn trả về object)
         try:
             cashflow = self.cf_calc.calculate(data, metrics)
         except Exception as e:
             logger.warning(f"CashFlow calc error: {e}")
-            cashflow = None
+            from models.metrics import CashFlowMetrics
+            cashflow = CashFlowMetrics()  # object rỗng
+        if data.accounting_standard == AccountingStandard.TT49:
+            cashflow = {
+                "not_applicable": True,
+                "note": "Cashflow metrics not applicable for banks (TT49)"
+            }
 
-        # 4. Beneish M-Score (cần CFO từ cashflow)
-        try:
-            cfo = cashflow.cfo if cashflow else None
-            beneish = self.beneish_calc.calculate(data, metrics, cfo=cfo)
-        except Exception as e:
-            logger.warning(f"Beneish calc error: {e}")
-            beneish = None
+        # 5. Beneish M-Score — skip cho ngân hàng (model calibrate cho doanh nghiệp)
+        beneish = None
+        if data.accounting_standard != AccountingStandard.TT49:
+            try:
+                cfo = cashflow.cfo if hasattr(cashflow, 'cfo') else None
+                beneish = self.beneish_calc.calculate(data, metrics, cfo=cfo)
+            except Exception as e:
+                logger.warning(f"Beneish calc error: {e}")
+        else:
+            beneish = {
+                "not_applicable": True,
+                "note": "Beneish M-Score not applicable for banks (TT49)"
+            }
 
-        # 5. Anomaly detection — basic + advanced
+        # 5. Beneish M-Score — skip cho ngân hàng (model calibrate cho doanh nghiệp)
+        beneish = None
+        if data.accounting_standard != AccountingStandard.TT49:
+            try:
+                cfo = cashflow.cfo if cashflow else None
+                beneish = self.beneish_calc.calculate(data, metrics, cfo=cfo)
+            except Exception as e:
+                logger.warning(f"Beneish calc error: {e}")
+
+        # 6. Anomaly detection — basic + advanced
         flags = self.detector.detect(data, metrics)
         try:
-            adv_flags = self.detector.detect_advanced(data, metrics, cashflow, beneish)
+            adv_flags = self.detector.detect_advanced(data, metrics, cashflow, beneish, banking)
             flags.extend(adv_flags)
         except Exception as e:
             logger.warning(f"Advanced anomaly error: {e}")
@@ -81,6 +123,7 @@ class FinBotService:
             dupont=dupont,
             cashflow=cashflow,
             beneish=beneish,
+            banking=banking,
             flags=flags,
         )
 

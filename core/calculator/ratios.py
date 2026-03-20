@@ -52,6 +52,23 @@ class FinancialCalculator:
             m.trade_receivables = bs_b("117") or bs_b("119")
             m.capex = abs(cf_b("61") or 0) or None  # Tiền chi mua TSCĐ
             # Không có subsidiary_income cho TT210 theo cách tương tự
+
+        elif std == AccountingStandard.TT49:
+            # Thông tư 49 — ngân hàng (semantic keys từ keyword matching)
+            # revenue ≈ Tổng thu nhập hoạt động (TOI)
+            m.revenue = inc_b("total_operating_income") or inc_b("net_interest_income")
+            m.revenue_prev = inc_pb("total_operating_income") or inc_pb("net_interest_income")
+            m.gross_profit = None            # N/A cho ngân hàng
+            # operating_profit ≈ PPOP (lợi nhuận trước dự phòng)
+            m.operating_profit = inc_b("pre_provision_profit")
+            m.net_profit = inc_b("pat")
+            m.net_profit_prev = inc_pb("pat")
+            # cash = tiền mặt + tiền gửi NHNN
+            m.cash = bs_b("cash_gold") or bs_b("deposits_sbv")
+            m.inventory = None               # N/A cho ngân hàng
+            m.trade_receivables = None       # Phải thu KH khác với dư nợ cho vay
+            m.capex = abs(cf_b("21") or 0) or None
+
         else:
             # Thông tư 200/202 — doanh nghiệp thông thường (mặc định)
             m.revenue = inc_b("10") or inc_b("01")
@@ -70,10 +87,15 @@ class FinancialCalculator:
             if data.is_holding_company and financial_income:
                 m.subsidiary_income = financial_income
 
-        # ── Common BS fields (giống nhau cho TT200 và TT210) ─────────────────
-        m.total_assets = bs_b("270")
-        m.total_liabilities = bs_b("300")
-        m.equity = bs_b("400") or bs_b("410")
+        # ── Common BS fields ──────────────────────────────────────────────────
+        if std == AccountingStandard.TT49:
+            m.total_assets = bs_b("total_assets")
+            m.total_liabilities = bs_b("total_liabilities")
+            m.equity = bs_b("equity")
+        else:
+            m.total_assets = bs_b("270")
+            m.total_liabilities = bs_b("300")
+            m.equity = bs_b("400") or bs_b("410")
 
         # ── Lợi nhuận ─────────────────────────────────────────────────────────
         m.gross_margin = safe_divide(m.gross_profit, m.revenue)
@@ -89,11 +111,15 @@ class FinancialCalculator:
             m.net_margin *= 100
 
         # ROE, ROA — dùng bình quân đầu kỳ/cuối kỳ
-        equity_avg = self._average(m.equity, to_billion(bs_p.get("400") or bs_p.get("410")))
-        assets_avg = self._average(m.total_assets, to_billion(bs_p.get("270")))
+        if std == AccountingStandard.TT49:
+            equity_avg = self._average(m.equity, to_billion(bs_p.get("equity")))
+            assets_avg = self._average(m.total_assets, to_billion(bs_p.get("total_assets")))
+        else:
+            equity_avg = self._average(m.equity, to_billion(bs_p.get("400") or bs_p.get("410")))
+            assets_avg = self._average(m.total_assets, to_billion(bs_p.get("270")))
 
         # TT210 income dùng YTD (lũy kế cả năm) → không nhân ×4
-        # TT200 dùng số liệu của 1 quý → nhân ×4 để annualize
+        # TT200/TT49 dùng số liệu của 1 quý → nhân ×4 để annualize
         annualize = 1 if std == AccountingStandard.TT210 else 4
 
         m.roe = safe_divide(m.net_profit, equity_avg)
@@ -121,10 +147,13 @@ class FinancialCalculator:
 
         # Interest coverage = EBIT / Interest expense
         # EBIT ≈ operating_profit (trước thuế và lãi vay)
-        # TT200: lãi vay = code "23"; TT210: chi phí lãi vay = code "52"
-        interest_expense = (
-            inc_b("52") if std == AccountingStandard.TT210 else inc_b("23")
-        )
+        # TT200: lãi vay = code "23"; TT210: code "52"; TT49: không áp dụng
+        if std == AccountingStandard.TT210:
+            interest_expense = inc_b("52")
+        elif std == AccountingStandard.TT49:
+            interest_expense = None  # Ngân hàng: NIM đã phản ánh cost of funds
+        else:
+            interest_expense = inc_b("23")
         if m.operating_profit and interest_expense and interest_expense != 0:
             m.interest_coverage = safe_divide(m.operating_profit, interest_expense)
 
@@ -132,9 +161,11 @@ class FinancialCalculator:
         # DSO = (Phải thu KH / DT thuần) × số ngày trong kỳ
         m.dso = self._calc_dso(m.trade_receivables, m.revenue)
 
-        # Inventory days = (HTK / Giá vốn) × số ngày
+        # Inventory days = (HTK / Giá vốn) × số ngày — N/A cho ngân hàng và CK
         cogs = inc_b("11")
-        if m.inventory and cogs and cogs != 0:
+        if m.inventory and cogs and cogs != 0 and std not in (
+            AccountingStandard.TT210, AccountingStandard.TT49
+        ):
             m.inventory_days = (m.inventory / cogs) * self.DAYS_IN_QUARTER
 
         # Asset turnover = DT / Tổng TS bình quân

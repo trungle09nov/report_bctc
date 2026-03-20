@@ -45,13 +45,17 @@ KNOWN_COMPANIES = {
     "BCM": "Becamex",
 }
 
-# Patterns loại hình doanh nghiệp
+# Patterns loại hình doanh nghiệp — thứ tự: cụ thể → tổng quát
 COMPANY_TYPE_PATTERNS = [
+    # Label "Công ty/Company:" thường có trong bìa BCTC ngân hàng
+    r'(?:Công\s*ty/Company|Company)\s*[:/]+\s*\*?\*?([^/*\n]+?)(?:\s*/|\*|\n|$)',
     r'CÔNG TY CỔ PHẦN TẬP ĐOÀN (.+?)(?:\n|$)',
     r'CÔNG TY CỔ PHẦN (.+?)(?:\n|$)',
     r'CÔNG TY TNHH (.+?)(?:\n|$)',
     r'TẬP ĐOÀN (.+?)(?:\n|$)',
-    r'NGÂN HÀNG (.+?)(?:\n|$)',
+    # NGÂN HÀNG TMCP trước generic NGÂN HÀNG để tránh bắt "Ngân hàng Nhà nước"
+    r'NGÂN HÀNG TMCP (.+?)(?:\n|$)',
+    r'NGÂN HÀNG (?!NHÀ NƯỚC|TRUNG ƯƠNG|NHÀ)(.+?)(?:\n|$)',
     r'TỔNG CÔNG TY (.+?)(?:\n|$)',
 ]
 
@@ -119,6 +123,14 @@ class CompanyExtractor:
         Tìm mã chứng khoán (ticker) từ nội dung.
         Thường xuất hiện trong: tiêu đề, header, mã số DN
         """
+        # Pattern: label "Mã chứng khoán/ Securities symbol:** MBB" — trong BCTC ngân hàng
+        m = re.search(
+            r'(?:Mã\s+chứng\s+khoán|Securities\s+symbol)[^:\n]*:\**\s*([A-Z]{2,5})',
+            content[:3000], re.IGNORECASE
+        )
+        if m:
+            return m.group(1).upper()
+
         # Pattern: mã ticker trong ngoặc đơn sau tên cty
         m = re.search(r'\(([A-Z]{2,4})\)', content[:3000])
         if m:

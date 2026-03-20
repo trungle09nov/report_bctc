@@ -1,210 +1,164 @@
 {
   "consolidated": {
-    "label": "HPG Hợp nhất Q4/2025",
+    "label": "Ngân hàng TMCP Quân đội Hợp nhất Q4/2025",
     "metadata": {
-      "company_name": "HÒA PHÁT",
+      "company_name": "Ngân hàng TMCP Quân đội",
       "period": "Q4/2025",
       "report_type": "consolidated",
       "is_holding_company": false
     },
     "metrics": {
-      "revenue": 156116.09,
-      "net_profit": 15514.93,
-      "total_assets": 257921.58,
-      "equity": 131220.01,
-      "gross_margin": 15.69,
-      "operating_margin": 11.47,
-      "net_margin": 9.94,
-      "roe": 50.48,
-      "roa": 25.73,
-      "current_ratio": 1.1,
-      "quick_ratio": 0.54,
-      "debt_to_equity": 0.97,
-      "debt_to_assets": 0.49,
-      "dso": 6.3,
-      "inventory_days": 36.12,
-      "revenue_growth_yoy": 12.43,
-      "profit_growth_yoy": 29.08
+      "operating_margin": 68.1,
+      "net_margin": 44.87,
+      "roe": 27.06,
+      "roa": 2.55,
+      "debt_to_equity": 10.38,
+      "debt_to_assets": 0.91,
+      "asset_turnover": 0.06,
+      "revenue_growth_yoy": 17.9,
+      "profit_growth_yoy": 39.44,
+      "revenue": 19527.95,
+      "revenue_prev": 16563.51,
+      "operating_profit": 13298.49,
+      "net_profit": 8762.57,
+      "net_profit_prev": 6284.15,
+      "total_assets": 1615763.93,
+      "total_liabilities": 1473741.4,
+      "equity": 142022.52,
+      "cash": 4965.79
     },
     "dupont": {
-      "roe_dupont_3f": 50.48,
-      "roe_dupont_5f": 50.48,
-      "net_margin": 9.94,
-      "asset_turnover": 2.589,
-      "equity_multiplier": 1.962,
-      "tax_burden": 0.86,
-      "interest_burden": 0.853,
-      "ebit_margin": 13.55,
-      "roe_from_operations": 25.73,
-      "roe_from_leverage": 24.75
+      "not_applicable": true,
+      "note": "DuPont analysis not applicable for banks (TT49)"
     },
     "cashflow": {
-      "ccc": 41.8,
-      "dso": 6.3,
-      "dio": 36.1,
-      "dpo": 0.6,
-      "cfo": 15693.9,
-      "fcf": -10056.0,
-      "capex_total": 25749.852002472,
-      "fcf_yield": -6.44,
-      "cash_conversion": 1.012,
-      "accrual_ratio": -0.07
+      "not_applicable": true,
+      "note": "Cashflow metrics not applicable for banks (TT49)"
     },
-    "beneish": {
-      "m_score": -1.558,
-      "interpretation": "likely_manipulator",
-      "confidence": "high",
-      "components": {
-        "dsri": 2.2468,
-        "gmi": 0.8489,
-        "aqi": 0.2568,
-        "sgi": 1.1243,
-        "depi": 1.4104,
-        "sgai": 0.8267,
-        "lvgi": 1.09,
-        "tata": -0.0007
-      }
-    },
+    "beneish": {},
     "flags": [
       {
         "type": "WARNING",
-        "code": "AR_OUTPACE_REVENUE",
-        "message": "Phải thu khách hàng tăng 152.6% YoY trong khi doanh thu chỉ tăng 12.4%. DSO có thể đang xấu đi — cần theo dõi chất lượng thu hồi công nợ."
+        "code": "BANK_HIGH_LDR",
+        "message": "LDR (Loan-to-Deposit) = 117.7% — tỷ lệ cho vay/huy động cao. Ngưỡng NHNN khuyến nghị ≤ 85%. Rủi ro thanh khoản nếu huy động tăng chậm.",
+        "detail": {
+          "ldr_pct": 117.65
+        }
       },
       {
         "type": "INFO",
-        "code": "CAPEX_PROJECT_COMPLETED",
-        "message": "TSCĐ hữu hình tăng 98% YoY (+66177 tỷ) trong khi Tài sản dở dang giảm 52935 tỷ. Dấu hiệu dự án đầu tư lớn đã hoàn thành và đưa vào khai thác."
-      },
-      {
-        "type": "INFO",
-        "code": "LARGE_VAT_REFUND_PENDING",
-        "message": "VAT chờ hoàn thuế: 7430 tỷ đồng (7.2% tài sản ngắn hạn). Thường do đầu tư CAPEX lớn, tiền hoàn thuế bị tồn đọng."
-      },
-      {
-        "type": "WARNING",
-        "code": "TIGHT_LIQUIDITY",
-        "message": "Current ratio = 1.10x — thanh khoản ngắn hạn ở mức thấp."
-      },
-      {
-        "type": "WARNING",
-        "code": "NEGATIVE_FCF",
-        "message": "FCF âm (-10056 tỷ) — CAPEX (25750 tỷ) vượt CFO (15694 tỷ). Giai đoạn đầu tư lớn: bình thường nếu là growth capex, đáng lo nếu kéo dài nhiều kỳ."
-      },
-      {
-        "type": "ALERT",
-        "code": "BENEISH_HIGH_RISK",
-        "message": "Beneish M-Score = -1.56 (ngưỡng cảnh báo: -1.78). Mô hình phát hiện nguy cơ làm đẹp BCTC — độ tin cậy: high. Lưu ý: Model calibrate trên thị trường Mỹ, cần đọc kỹ từng thành phần (DSRI, TATA) trước khi kết luận — tăng trưởng thực cũng có thể trigger false positive."
+        "code": "BANK_RAPID_LOAN_GROWTH",
+        "message": "Tín dụng tăng 39.6% YoY — tốc độ cao. Tăng trưởng tốt nếu đi kèm chất lượng tín dụng; cần theo dõi NPL trong các kỳ tiếp theo.",
+        "detail": {
+          "loan_growth_pct": 39.57
+        }
       }
-    ]
+    ],
+    "banking": {
+      "interest_income": 26132.78,
+      "interest_expense": -11577.49,
+      "net_interest_income": 14555.29,
+      "net_interest_income_prev": 11142.18,
+      "net_fee_income": 2101.17,
+      "total_operating_income": 19527.95,
+      "total_operating_income_prev": 16563.51,
+      "operating_expense": 6229.46,
+      "pre_provision_profit": 13298.49,
+      "loan_loss_provision": 2169.36,
+      "loans_gross": 1084019.37,
+      "loans_gross_prev": 776657.85,
+      "loan_provisions_balance": 13150.59,
+      "customer_deposits": 921368.13,
+      "customer_deposits_prev": 714154.48,
+      "nim": 4.24,
+      "ldr": 117.65,
+      "cir": 31.9,
+      "credit_cost": 0.93,
+      "nii_growth": 30.63,
+      "toi_growth": 17.9,
+      "loan_growth": 39.57,
+      "deposit_growth": 29.02
+    }
   },
   "parent": {
-    "label": "HPG Công ty mẹ Q4/2025",
+    "label": "Ngân hàng TMCP Quân đội Hợp nhất Q4/2025",
     "metadata": {
-      "company_name": "HÒA PHÁT",
+      "company_name": "Ngân hàng TMCP Quân đội",
       "period": "Q4/2025",
-      "report_type": "parent",
-      "is_holding_company": true
+      "report_type": "consolidated",
+      "is_holding_company": false
     },
     "metrics": {
-      "revenue": 343.2,
-      "net_profit": 14074.17,
-      "total_assets": 98670.78,
-      "equity": 94430.93,
-      "gross_margin": 21.5,
-      "operating_margin": 4100.87,
-      "net_margin": 4100.87,
-      "roe": 64.26,
-      "roa": 62.39,
-      "current_ratio": 1.0,
-      "quick_ratio": 1.0,
-      "debt_to_equity": 0.04,
-      "debt_to_assets": 0.04,
-      "dso": 59.2,
-      "inventory_days": 0.66,
-      "revenue_growth_yoy": 1.89,
-      "profit_growth_yoy": 37.34
+      "operating_margin": 68.1,
+      "net_margin": 44.87,
+      "roe": 27.06,
+      "roa": 2.55,
+      "debt_to_equity": 10.38,
+      "debt_to_assets": 0.91,
+      "asset_turnover": 0.06,
+      "revenue_growth_yoy": 17.9,
+      "profit_growth_yoy": 39.44,
+      "revenue": 19527.95,
+      "revenue_prev": 16563.51,
+      "operating_profit": 13298.49,
+      "net_profit": 8762.57,
+      "net_profit_prev": 6284.15,
+      "total_assets": 1615763.93,
+      "total_liabilities": 1473741.4,
+      "equity": 142022.52,
+      "cash": 4965.79
     },
     "dupont": {
-      "roe_dupont_3f": 64.26,
-      "roe_dupont_5f": 63.36,
-      "net_margin": 4100.87,
-      "asset_turnover": 0.015,
-      "equity_multiplier": 1.03,
-      "tax_burden": 1.0,
-      "interest_burden": 0.988,
-      "ebit_margin": 4150.66,
-      "roe_from_operations": 62.39,
-      "roe_from_leverage": 1.87
+      "not_applicable": true,
+      "note": "DuPont analysis not applicable for banks (TT49)"
     },
     "cashflow": {
-      "ccc": 59.9,
-      "dso": 59.2,
-      "dio": 0.7,
-      "dpo": 0.0,
-      "cfo": -737.9,
-      "fcf": -741.7,
-      "capex_total": 3.848383768,
-      "fcf_yield": -216.11,
-      "cash_conversion": -0.052,
-      "accrual_ratio": 16.42
+      "not_applicable": true,
+      "note": "Cashflow metrics not applicable for banks (TT49)"
     },
-    "beneish": {
-      "m_score": -1.459,
-      "interpretation": "likely_manipulator",
-      "confidence": "high",
-      "components": {
-        "dsri": 1.5144,
-        "gmi": 0.9342,
-        "aqi": 0.9988,
-        "sgi": 1.0189,
-        "depi": 0.8244,
-        "sgai": 1.4258,
-        "lvgi": 1.1297,
-        "tata": 0.1501
-      }
-    },
+    "beneish": {},
     "flags": [
       {
+        "type": "WARNING",
+        "code": "BANK_HIGH_LDR",
+        "message": "LDR (Loan-to-Deposit) = 117.7% — tỷ lệ cho vay/huy động cao. Ngưỡng NHNN khuyến nghị ≤ 85%. Rủi ro thanh khoản nếu huy động tăng chậm.",
+        "detail": {
+          "ldr_pct": 117.65
+        }
+      },
+      {
         "type": "INFO",
-        "code": "HOLDING_COMPANY_PATTERN",
-        "message": "Báo cáo công ty mẹ: đây là holding company — tài sản chủ yếu là đầu tư vào công ty con. Chỉ số vận hành (gross margin, ROA, v.v.) không phản ánh thực tế hoạt động tập đoàn. Hãy đọc báo cáo hợp nhất để có bức tranh đầy đủ."
-      },
-      {
-        "type": "INFO",
-        "code": "PROFIT_FROM_SUBSIDIARIES",
-        "message": "LNST cao nhưng 102% đến từ lợi nhuận công ty con chuyển về (14347 tỷ). Không phản ánh hoạt động kinh doanh trực tiếp của công ty mẹ."
-      },
-      {
-        "type": "WARNING",
-        "code": "AR_OUTPACE_REVENUE",
-        "message": "Phải thu khách hàng tăng 54.3% YoY trong khi doanh thu chỉ tăng 1.9%. DSO có thể đang xấu đi — cần theo dõi chất lượng thu hồi công nợ."
-      },
-      {
-        "type": "WARNING",
-        "code": "TIGHT_LIQUIDITY",
-        "message": "Current ratio = 1.00x — thanh khoản ngắn hạn ở mức thấp."
-      },
-      {
-        "type": "WARNING",
-        "code": "LOW_CASH_CONVERSION",
-        "message": "Cash conversion = -0.05x: CFO (-738 tỷ) chỉ bằng -5% LNST. Lợi nhuận kế toán chuyển đổi thành tiền mặt thực tế thấp — cần kiểm tra accruals."
-      },
-      {
-        "type": "WARNING",
-        "code": "HIGH_ACCRUAL_RATIO",
-        "message": "Accrual ratio = 16.4% — lợi nhuận dựa nhiều vào ghi nhận kế toán hơn tiền thực. Cần đối chiếu với xu hướng các kỳ trước."
-      },
-      {
-        "type": "WARNING",
-        "code": "NEGATIVE_FCF",
-        "message": "FCF âm (-742 tỷ) — CAPEX (4 tỷ) vượt CFO (-738 tỷ). Giai đoạn đầu tư lớn: bình thường nếu là growth capex, đáng lo nếu kéo dài nhiều kỳ."
-      },
-      {
-        "type": "ALERT",
-        "code": "BENEISH_HIGH_RISK",
-        "message": "Beneish M-Score = -1.46 (ngưỡng cảnh báo: -1.78). Mô hình phát hiện nguy cơ làm đẹp BCTC — độ tin cậy: high. Lưu ý: Model calibrate trên thị trường Mỹ, cần đọc kỹ từng thành phần (DSRI, TATA) trước khi kết luận — tăng trưởng thực cũng có thể trigger false positive."
+        "code": "BANK_RAPID_LOAN_GROWTH",
+        "message": "Tín dụng tăng 39.6% YoY — tốc độ cao. Tăng trưởng tốt nếu đi kèm chất lượng tín dụng; cần theo dõi NPL trong các kỳ tiếp theo.",
+        "detail": {
+          "loan_growth_pct": 39.57
+        }
       }
-    ]
+    ],
+    "banking": {
+      "interest_income": 26132.78,
+      "interest_expense": -11577.49,
+      "net_interest_income": 14555.29,
+      "net_interest_income_prev": 11142.18,
+      "net_fee_income": 2101.17,
+      "total_operating_income": 19527.95,
+      "total_operating_income_prev": 16563.51,
+      "operating_expense": 6229.46,
+      "pre_provision_profit": 13298.49,
+      "loan_loss_provision": 2169.36,
+      "loans_gross": 1084019.37,
+      "loans_gross_prev": 776657.85,
+      "loan_provisions_balance": 13150.59,
+      "customer_deposits": 921368.13,
+      "customer_deposits_prev": 714154.48,
+      "nim": 4.24,
+      "ldr": 117.65,
+      "cir": 31.9,
+      "credit_cost": 0.93,
+      "nii_growth": 30.63,
+      "toi_growth": 17.9,
+      "loan_growth": 39.57,
+      "deposit_growth": 29.02
+    }
   }
 }

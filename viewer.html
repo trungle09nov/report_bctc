@@ -1,68 +1,61 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FinBot Viewer</title>
   <style>
     :root {
       --bg: #0d1117;
       --surface: #161b22;
       --surface2: #21262d;
       --border: #30363d;
-      --accent: #f78166;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
       --accent-blue: #58a6ff;
       --accent-green: #3fb950;
       --accent-yellow: #d29922;
       --accent-purple: #bc8cff;
-      --text: #e6edf3;
-      --text-muted: #8b949e;
+      --accent: #f85149;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
-      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
       color: var(--text);
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      min-height: 100vh;
+      line-height: 1.5;
+      margin: 0;
       padding: 20px;
     }
-    .container { max-width: 1200px; margin: 0 auto; }
+    
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
     
     /* Header */
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 24px;
       padding-bottom: 16px;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 20px;
     }
-    .logo { font-size: 24px; font-weight: 700; }
+    .logo { font-size: 20px; font-weight: 700; }
     .logo span { color: var(--accent-blue); }
     
     /* Tabs */
-    .tabs {
-      display: flex;
-      gap: 4px;
-      background: var(--surface2);
-      padding: 4px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-    }
+    .tabs { display: flex; gap: 8px; }
     .tab {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 6px;
-      background: transparent;
+      background: var(--surface2);
+      border: 1px solid var(--border);
       color: var(--text-muted);
+      padding: 6px 16px;
+      border-radius: 6px;
       cursor: pointer;
       font-size: 13px;
       font-weight: 500;
     }
-    .tab.active {
-      background: var(--accent-blue);
-      color: #000;
-    }
+    .tab:hover { background: var(--border); color: var(--text); }
+    .tab.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
     
     /* Upload */
     .upload-zone {
@@ -249,25 +242,8 @@
     .cashflow-label { color: var(--text-muted); }
     .cashflow-value { font-family: 'Consolas', monospace; font-weight: 600; }
     
-    /* Loading */
-    .loading {
-      text-align: center;
-      padding: 60px;
-      color: var(--text-muted);
-    }
-    .spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent-blue);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 16px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    
-    /* No data */
-    .no-data {
+    /* Loading & No Data */
+    .loading, .no-data {
       text-align: center;
       padding: 60px;
       color: var(--text-muted);
@@ -363,22 +339,23 @@
         return;
       }
       
-      const m = data.metrics;
+      const m = data.metrics || {};
       const dp = data.dupont;
       const cf = data.cashflow;
       const b = data.beneish;
-      const flags = data.flags || [];
+      const banking = data.banking || {}; // ĐÃ FIX: Khai báo biến banking
+      const flags = data.flags ||[];
       
       let html = '';
       
       // Metadata header
       html += `
         <div class="summary">
-          <div class="summary-label">📋 ${data.metadata.company_name || 'N/A'}</div>
+          <div class="summary-label">📋 ${data.metadata?.company_name || 'N/A'}</div>
           <div class="summary-text">
-            <strong>Kỳ:</strong> ${data.metadata.period || 'N/A'} | 
-            <strong>Loại:</strong> ${data.metadata.report_type === 'consolidated' ? 'Hợp nhất' : 'Công ty mẹ'}
-            ${data.metadata.is_holding_company ? ' | <span style="color: var(--accent-yellow)">⚡ Holding Company</span>' : ''}
+            <strong>Kỳ:</strong> ${data.metadata?.period || 'N/A'} | 
+            <strong>Loại:</strong> ${data.metadata?.report_type === 'consolidated' ? 'Hợp nhất' : 'Công ty mẹ'}
+            ${data.metadata?.is_holding_company ? ' | <span style="color: var(--accent-yellow)">⚡ Holding Company</span>' : ''}
           </div>
         </div>
       `;
@@ -386,175 +363,248 @@
       // Key Metrics
       html += '<div class="metrics-title">📈 Chỉ số chính</div>';
       html += '<div class="metrics-grid">';
-      const metrics = [
-        { label: 'Doanh thu', value: m.revenue, highlight: true },
-        { label: 'LNST', value: m.net_profit, highlight: true },
-        { label: 'Tổng tài sản', value: m.total_assets },
-        { label: 'Vốn chủ sở hữu', value: m.equity },
-        { label: 'Biên LN gộp', value: m.gross_margin, unit: '%' },
-        { label: 'Biên LN ròng', value: m.net_margin, unit: '%' },
-        { label: 'ROE', value: m.roe, unit: '%' },
-        { label: 'ROA', value: m.roa, unit: '%' },
-        { label: 'Current Ratio', value: m.current_ratio, unit: 'x' },
-        { label: 'Quick Ratio', value: m.quick_ratio, unit: 'x' },
-        { label: 'D/E Ratio', value: m.debt_to_equity, unit: 'x' },
-        { label: 'DSO', value: m.dso, unit: ' ngày' },
-        { label: 'Inventory Days', value: m.inventory_days, unit: ' ngày' },
-        { label: 'DT tăng trưởng YoY', value: m.revenue_growth_yoy, unit: '%' },
-        { label: 'LN tăng trưởng YoY', value: m.profit_growth_yoy, unit: '%' },
-      ];
-      
-      metrics.forEach(metric => {
-        if (metric.value !== null && metric.value !== undefined) {
-          html += `
-            <div class="metric-card ${metric.highlight ? 'highlight' : ''}">
-              <div class="metric-label">${metric.label}</div>
-              <div class="metric-value">${formatValue(metric.value, metric.unit || '')}</div>
-            </div>
-          `;
-        }
-      });
+      if (banking && banking.is_bank) {
+        const bankMetrics =[
+          { label: 'Tổng tài sản', value: m.total_assets },
+          { label: 'Vốn chủ sở hữu', value: m.equity },
+          { label: 'Lợi nhuận sau thuế', value: m.net_profit, highlight: true },
+          { label: 'ROE', value: m.roe, unit: '%' },
+          { label: 'ROA', value: m.roa, unit: '%' },
+          { label: 'CAR (Tỷ lệ an toàn vốn)', value: banking.car, unit: '%' },
+          { label: 'NIM (Biên lãi ròng)', value: banking.nim, unit: '%' },
+          { label: 'CIR (Tỷ lệ chi phí/thu nhập)', value: banking.cir, unit: '%' },
+          { label: 'CASA (Tỷ lệ tiền gửi không kỳ hạn)', value: banking.casa, unit: '%' },
+          { label: 'LDR (Tỷ lệ cho vay/tiền gửi)', value: banking.ldr, unit: '%' },
+          { label: 'NPL (Nợ xấu)', value: banking.npl, unit: '%' },
+          { label: 'Tăng trưởng tín dụng', value: banking.credit_growth, unit: '%' },
+          { label: 'Tăng trưởng huy động', value: banking.deposit_growth, unit: '%' },
+        ];
+        bankMetrics.forEach(metric => {
+          if (metric.value !== null && metric.value !== undefined) {
+            html += `
+              <div class="metric-card ${metric.highlight ? 'highlight' : ''}">
+                <div class="metric-label">${metric.label}</div>
+                <div class="metric-value">${formatValue(metric.value, metric.unit || '')}</div>
+              </div>
+            `;
+          }
+        });
+      } else {
+        const metrics =[
+          { label: 'Doanh thu', value: m.revenue, highlight: true },
+          { label: 'LNST', value: m.net_profit, highlight: true },
+          { label: 'Tổng tài sản', value: m.total_assets },
+          { label: 'Vốn chủ sở hữu', value: m.equity },
+          { label: 'Biên LN gộp', value: m.gross_margin, unit: '%' },
+          { label: 'Biên LN ròng', value: m.net_margin, unit: '%' },
+          { label: 'ROE', value: m.roe, unit: '%' },
+          { label: 'ROA', value: m.roa, unit: '%' },
+          { label: 'Current Ratio', value: m.current_ratio, unit: 'x' },
+          { label: 'Quick Ratio', value: m.quick_ratio, unit: 'x' },
+          { label: 'D/E Ratio', value: m.debt_to_equity, unit: 'x' },
+          { label: 'DSO', value: m.dso, unit: ' ngày' },
+          { label: 'Inventory Days', value: m.inventory_days, unit: ' ngày' },
+          { label: 'DT tăng trưởng YoY', value: m.revenue_growth_yoy, unit: '%' },
+          { label: 'LN tăng trưởng YoY', value: m.profit_growth_yoy, unit: '%' },
+        ];
+        metrics.forEach(metric => {
+          if (metric.value !== null && metric.value !== undefined) {
+            html += `
+              <div class="metric-card ${metric.highlight ? 'highlight' : ''}">
+                <div class="metric-label">${metric.label}</div>
+                <div class="metric-value">${formatValue(metric.value, metric.unit || '')}</div>
+              </div>
+            `;
+          }
+        });
+      }
       html += '</div>';
       
       // DuPont Analysis
       if (dp) {
-        html += `
-          <div class="section">
-            <div class="section-title">🔬 DUPONT DECOMPOSITION</div>
-            <div class="dupont-formula">ROE = Net Margin × Asset Turnover × Equity Multiplier</div>
-            <div class="dupont-grid">
-              <div class="dupont-item">
-                <div class="dupont-item-label">ROE (3-Factor)</div>
-                <div class="dupont-item-value" style="color: var(--accent-green)">${dp.roe_dupont_3f !== null ? dp.roe_dupont_3f?.toFixed(2) + '%' : 'N/A'}</div>
-              </div>
-              <div class="dupont-item">
-                <div class="dupont-item-label">ROE (5-Factor)</div>
-                <div class="dupont-item-value" style="color: var(--accent-blue)">${dp.roe_dupont_5f !== null ? dp.roe_dupont_5f?.toFixed(2) + '%' : 'N/A'}</div>
-              </div>
-              <div class="dupont-item">
-                <div class="dupont-item-label">Equity Multiplier</div>
-                <div class="dupont-item-value">${dp.equity_multiplier !== null ? dp.equity_multiplier?.toFixed(2) + 'x' : 'N/A'}</div>
-              </div>
+        if (dp.not_applicable) {
+          html += `
+            <div class="section">
+              <div class="section-title">🔬 DUPONT DECOMPOSITION</div>
+              <div style="color: var(--text-muted); font-size: 14px; padding: 12px 0;">Không áp dụng cho ngân hàng.</div>
             </div>
-            <div style="margin-top: 12px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
-              <div style="text-align: center; font-size: 12px;">
-                <div style="color: var(--text-muted)">Net Margin</div>
-                <div style="font-weight: 600">${dp.net_margin?.toFixed(2) || 'N/A'}%</div>
-              </div>
-              <div style="text-align: center; font-size: 12px;">
-                <div style="color: var(--text-muted)">Asset Turnover</div>
-                <div style="font-weight: 600">${dp.asset_turnover?.toFixed(2) || 'N/A'}x</div>
-              </div>
-              <div style="text-align: center; font-size: 12px;">
-                <div style="color: var(--text-muted)">Tax Burden</div>
-                <div style="font-weight: 600">${dp.tax_burden?.toFixed(3) || 'N/A'}</div>
-              </div>
-              <div style="text-align: center; font-size: 12px;">
-                <div style="color: var(--text-muted)">Interest Burden</div>
-                <div style="font-weight: 600">${dp.interest_burden?.toFixed(3) || 'N/A'}</div>
-              </div>
-              <div style="text-align: center; font-size: 12px;">
-                <div style="color: var(--text-muted)">EBIT Margin</div>
-                <div style="font-weight: 600">${dp.ebit_margin?.toFixed(2) || 'N/A'}%</div>
-              </div>
-            </div>
-            ${dp.roe_from_operations !== null ? `
-            <div style="margin-top: 16px; padding: 12px; background: var(--surface2); border-radius: 6px;">
-              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Nguồn gốc ROE</div>
-              <div style="display: flex; gap: 20px;">
-                <div>
-                  <span style="color: var(--accent-green)">Từ vận hành:</span>
-                  <span style="font-weight: 600; margin-left: 8px">${dp.roe_from_operations?.toFixed(2)}%</span>
+          `;
+        } else {
+          html += `
+            <div class="section">
+              <div class="section-title">🔬 DUPONT DECOMPOSITION</div>
+              <div class="dupont-formula">ROE = Net Margin × Asset Turnover × Equity Multiplier</div>
+              <div class="dupont-grid">
+                <div class="dupont-item">
+                  <div class="dupont-item-label">ROE (3-Factor)</div>
+                  <div class="dupont-item-value" style="color: var(--accent-green)">${dp.roe_dupont_3f !== null ? dp.roe_dupont_3f?.toFixed(2) + '%' : 'N/A'}</div>
                 </div>
-                <div>
-                  <span style="color: var(--accent-yellow)">Từ đòn bẩy:</span>
-                  <span style="font-weight: 600; margin-left: 8px">${dp.roe_from_leverage?.toFixed(2)}%</span>
+                <div class="dupont-item">
+                  <div class="dupont-item-label">ROE (5-Factor)</div>
+                  <div class="dupont-item-value" style="color: var(--accent-blue)">${dp.roe_dupont_5f !== null ? dp.roe_dupont_5f?.toFixed(2) + '%' : 'N/A'}</div>
+                </div>
+                <div class="dupont-item">
+                  <div class="dupont-item-label">Equity Multiplier</div>
+                  <div class="dupont-item-value">${dp.equity_multiplier !== null ? dp.equity_multiplier?.toFixed(2) + 'x' : 'N/A'}</div>
                 </div>
               </div>
-            </div>` : ''}
-          </div>
-        `;
+              <div style="margin-top: 12px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+                <div style="text-align: center; font-size: 12px;">
+                  <div style="color: var(--text-muted)">Net Margin</div>
+                  <div style="font-weight: 600">${dp.net_margin?.toFixed(2) || 'N/A'}%</div>
+                </div>
+                <div style="text-align: center; font-size: 12px;">
+                  <div style="color: var(--text-muted)">Asset Turnover</div>
+                  <div style="font-weight: 600">${dp.asset_turnover?.toFixed(2) || 'N/A'}x</div>
+                </div>
+                <div style="text-align: center; font-size: 12px;">
+                  <div style="color: var(--text-muted)">Tax Burden</div>
+                  <div style="font-weight: 600">${dp.tax_burden?.toFixed(3) || 'N/A'}</div>
+                </div>
+                <div style="text-align: center; font-size: 12px;">
+                  <div style="color: var(--text-muted)">Interest Burden</div>
+                  <div style="font-weight: 600">${dp.interest_burden?.toFixed(3) || 'N/A'}</div>
+                </div>
+                <div style="text-align: center; font-size: 12px;">
+                  <div style="color: var(--text-muted)">EBIT Margin</div>
+                  <div style="font-weight: 600">${dp.ebit_margin?.toFixed(2) || 'N/A'}%</div>
+                </div>
+              </div>
+              ${dp.roe_from_operations !== null && dp.roe_from_operations !== undefined ? `
+              <div style="margin-top: 16px; padding: 12px; background: var(--surface2); border-radius: 6px;">
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Nguồn gốc ROE</div>
+                <div style="display: flex; gap: 20px;">
+                  <div>
+                    <span style="color: var(--accent-green)">Từ vận hành:</span>
+                    <span style="font-weight: 600; margin-left: 8px">${dp.roe_from_operations?.toFixed(2)}%</span>
+                  </div>
+                  <div>
+                    <span style="color: var(--accent-yellow)">Từ đòn bẩy:</span>
+                    <span style="font-weight: 600; margin-left: 8px">${dp.roe_from_leverage?.toFixed(2)}%</span>
+                  </div>
+                </div>
+              </div>` : ''}
+            </div>
+          `;
+        }
       }
       
       // Cashflow
       if (cf) {
-        html += `
-          <div class="section">
-            <div class="section-title">💵 DÒNG TIỀN & CCC</div>
-            <div class="cashflow-grid">
-              <div>
-                <div class="cashflow-item">
-                  <span class="cashflow-label">Cash Conversion Cycle</span>
-                  <span class="cashflow-value">${cf.ccc !== null ? cf.ccc.toFixed(0) + ' ngày' : 'N/A'}</span>
+        if (cf.not_applicable) {
+          html += `
+            <div class="section">
+              <div class="section-title">💵 DÒNG TIỀN & CCC</div>
+              <div style="color: var(--text-muted); font-size: 14px; padding: 12px 0;">Không áp dụng cho ngân hàng.</div>
+            </div>
+          `;
+        } else {
+          html += `
+            <div class="section">
+              <div class="section-title">💵 DÒNG TIỀN & CCC</div>
+              <div class="cashflow-grid">
+                <div>
+                  <div class="cashflow-item">
+                    <span class="cashflow-label">Cash Conversion Cycle</span>
+                    <span class="cashflow-value">${cf.ccc !== null ? cf.ccc.toFixed(0) + ' ngày' : 'N/A'}</span>
+                  </div>
+                  <div class="cashflow-item">
+                    <span class="cashflow-label">DSO</span>
+                    <span class="cashflow-value">${cf.dso?.toFixed(1) || 'N/A'} ngày</span>
+                  </div>
+                  <div class="cashflow-item">
+                    <span class="cashflow-label">DIO</span>
+                    <span class="cashflow-value">${cf.dio?.toFixed(1) || 'N/A'} ngày</span>
+                  </div>
+                  <div class="cashflow-item">
+                    <span class="cashflow-label">DPO</span>
+                    <span class="cashflow-value">${cf.dpo?.toFixed(1) || 'N/A'} ngày</span>
+                  </div>
                 </div>
-                <div class="cashflow-item">
-                  <span class="cashflow-label">DSO</span>
-                  <span class="cashflow-value">${cf.dso?.toFixed(1) || 'N/A'} ngày</span>
-                </div>
-                <div class="cashflow-item">
-                  <span class="cashflow-label">DIO</span>
-                  <span class="cashflow-value">${cf.dio?.toFixed(1) || 'N/A'} ngày</span>
-                </div>
-                <div class="cashflow-item">
-                  <span class="cashflow-label">DPO</span>
-                  <span class="cashflow-value">${cf.dpo?.toFixed(1) || 'N/A'} ngày</span>
-                </div>
-              </div>
-              <div>
-                <div class="cashflow-item">
-                  <span class="cashflow-label">CFO</span>
-                  <span class="cashflow-value">${cf.cfo !== null ? formatValue(cf.cfo) : 'N/A'}</span>
-                </div>
-                <div class="cashflow-item">
-                  <span class="cashflow-label">FCF (CFO - Capex)</span>
-                  <span class="cashflow-value" style="color: ${cf.fcf >= 0 ? 'var(--accent-green)' : 'var(--accent)'}">
-                    ${cf.fcf !== null ? (cf.fcf >= 0 ? '+' : '') + formatValue(cf.fcf) : 'N/A'}
-                  </span>
-                </div>
-                <div class="cashflow-item">
-                  <span class="cashflow-label">FCF Yield</span>
-                  <span class="cashflow-value">${cf.fcf_yield?.toFixed(1) || 'N/A'}%</span>
-                </div>
-                <div class="cashflow-item">
-                  <span class="cashflow-label">Cash Conversion (CFO/LNST)</span>
-                  <span class="cashflow-value">${cf.cash_conversion?.toFixed(2) || 'N/A'}x</span>
+                <div>
+                  <div class="cashflow-item">
+                    <span class="cashflow-label">CFO</span>
+                    <span class="cashflow-value">${cf.cfo !== null ? formatValue(cf.cfo) : 'N/A'}</span>
+                  </div>
+                  <div class="cashflow-item">
+                    <span class="cashflow-label">FCF (CFO - Capex)</span>
+                    <span class="cashflow-value" style="color: ${cf.fcf >= 0 ? 'var(--accent-green)' : 'var(--accent)'}">
+                      ${cf.fcf !== null ? (cf.fcf >= 0 ? '+' : '') + formatValue(cf.fcf) : 'N/A'}
+                    </span>
+                  </div>
+                  <div class="cashflow-item">
+                    <span class="cashflow-label">FCF Yield</span>
+                    <span class="cashflow-value">${cf.fcf_yield?.toFixed(1) || 'N/A'}%</span>
+                  </div>
+                  <div class="cashflow-item">
+                    <span class="cashflow-label">Cash Conversion (CFO/LNST)</span>
+                    <span class="cashflow-value">${cf.cash_conversion?.toFixed(2) || 'N/A'}x</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        `;
+          `;
+        }
       }
       
       // Beneish M-Score
-      if (b && b.m_score !== null) {
-        const scoreClass = b.interpretation === 'likely_clean' ? 'clean' : 
-                          b.interpretation === 'gray_zone' ? 'gray' : 'manipulator';
-        const interpLabel = {
-          'likely_clean': '✅ Likely Clean',
-          'gray_zone': '⚠️ Gray Zone',
-          'likely_manipulator': '🚨 Potential Manipulator',
-          'cannot_assess': '❓ Cannot Assess'
-        };
-        
-        html += `
-          <div class="section">
-            <div class="section-title">🔍 BENEISH M-SCORE</div>
-            <div class="mscore ${scoreClass}">
-              <div class="mscore-value">${b.m_score.toFixed(3)}</div>
-              <div>
-                <div class="mscore-interpretation">${interpLabel[b.interpretation] || b.interpretation}</div>
-                <div style="font-size: 12px; color: var(--text-muted)">Confidence: ${b.confidence}</div>
+      if (b) {
+        if (b.not_applicable) {
+          html += `
+            <div class="section">
+              <div class="section-title">🔍 BENEISH M-SCORE</div>
+              <div style="color: var(--text-muted); font-size: 14px; padding: 12px 0;">Không áp dụng cho ngân hàng.</div>
+            </div>
+          `;
+        } else if (b.m_score !== null && b.m_score !== undefined) {
+          const scoreClass = b.interpretation === 'likely_clean' ? 'clean' : 
+                            b.interpretation === 'gray_zone' ? 'gray' : 'manipulator';
+          const interpLabel = {
+            'likely_clean': '✅ Likely Clean',
+            'gray_zone': '⚠️ Gray Zone',
+            'likely_manipulator': '🚨 Potential Manipulator',
+            'cannot_assess': '❓ Cannot Assess'
+          };
+          html += `
+            <div class="section">
+              <div class="section-title">🔍 BENEISH M-SCORE</div>
+              <div class="mscore ${scoreClass}">
+                <div class="mscore-value">${b.m_score.toFixed(3)}</div>
+                <div>
+                  <div class="mscore-interpretation">${interpLabel[b.interpretation] || b.interpretation}</div>
+                  <div style="font-size: 12px; color: var(--text-muted)">Confidence: ${b.confidence}</div>
+                </div>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Components:</div>
+              <div class="components">
+                ${Object.entries(b.components || {}).map(([k, v]) => `
+                  <div class="component">
+                    <span class="component-name">${k.toUpperCase()}</span>
+                    <span class="component-value">${v !== null ? v.toFixed(4) : 'N/A'}</span>
+                  </div>
+                `).join('')}
               </div>
             </div>
-            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Components:</div>
-            <div class="components">
-              ${Object.entries(b.components || {}).map(([k, v]) => `
-                <div class="component">
-                  <span class="component-name">${k.toUpperCase()}</span>
-                  <span class="component-value">${v !== null ? v.toFixed(4) : 'N/A'}</span>
-                </div>
-              `).join('')}
+          `;
+        }
+      }
+      
+      // Banking Section (detailed)
+      if (banking && banking.is_bank) {
+        html += `
+          <div class="section">
+            <div class="section-title">🏦 PHÂN TÍCH NGÂN HÀNG</div>
+            <div class="metrics-grid">
+              <div class="metric-card"><div class="metric-label">CAR</div><div class="metric-value">${banking.car !== null && banking.car !== undefined ? banking.car.toFixed(2) + '%' : 'N/A'}</div></div>
+              <div class="metric-card"><div class="metric-label">NIM</div><div class="metric-value">${banking.nim !== null && banking.nim !== undefined ? banking.nim.toFixed(2) + '%' : 'N/A'}</div></div>
+              <div class="metric-card"><div class="metric-label">CIR</div><div class="metric-value">${banking.cir !== null && banking.cir !== undefined ? banking.cir.toFixed(2) + '%' : 'N/A'}</div></div>
+              <div class="metric-card"><div class="metric-label">CASA</div><div class="metric-value">${banking.casa !== null && banking.casa !== undefined ? banking.casa.toFixed(2) + '%' : 'N/A'}</div></div>
+              <div class="metric-card"><div class="metric-label">LDR</div><div class="metric-value">${banking.ldr !== null && banking.ldr !== undefined ? banking.ldr.toFixed(2) + '%' : 'N/A'}</div></div>
+              <div class="metric-card"><div class="metric-label">NPL</div><div class="metric-value">${banking.npl !== null && banking.npl !== undefined ? banking.npl.toFixed(2) + '%' : 'N/A'}</div></div>
+              <div class="metric-card"><div class="metric-label">Tăng trưởng tín dụng</div><div class="metric-value">${banking.credit_growth !== null && banking.credit_growth !== undefined ? banking.credit_growth.toFixed(2) + '%' : 'N/A'}</div></div>
+              <div class="metric-card"><div class="metric-label">Tăng trưởng huy động</div><div class="metric-value">${banking.deposit_growth !== null && banking.deposit_growth !== undefined ? banking.deposit_growth.toFixed(2) + '%' : 'N/A'}</div></div>
             </div>
+            <div style="margin-top: 16px; color: var(--text-muted); font-size: 13px;">Các chỉ số đặc thù ngân hàng: CAR (an toàn vốn), NIM (biên lãi ròng), CIR (chi phí/thu nhập), CASA (tiền gửi không kỳ hạn), LDR (cho vay/tiền gửi), NPL (nợ xấu).</div>
           </div>
         `;
       }

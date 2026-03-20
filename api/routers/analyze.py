@@ -100,22 +100,34 @@ def _format_section(data, result) -> dict:
     # Metrics: lấy từ result.metrics.to_dict()
     metrics = result.metrics.to_dict()
 
+
     # DuPont: rename roe_dupont_3 → roe_dupont_3f, roe_dupont_5 → roe_dupont_5f
+    banking = None
+
     dupont = {}
     if result.dupont:
-        raw = result.dupont.to_dict()
+        if isinstance(result.dupont, dict):
+            raw = result.dupont
+        else:
+            raw = result.dupont.to_dict()
         dupont = {
             k.replace("roe_dupont_3", "roe_dupont_3f").replace("roe_dupont_5", "roe_dupont_5f"): v
             for k, v in raw.items()
         }
 
     # Cashflow
-    cashflow = result.cashflow.to_dict() if result.cashflow else {}
+    if result.cashflow:
+        cashflow = result.cashflow if isinstance(result.cashflow, dict) else result.cashflow.to_dict()
+    else:
+        cashflow = {}
 
     # Beneish: tách components ra khỏi top-level
     beneish = {}
     if result.beneish:
-        raw = result.beneish.to_dict()
+        if isinstance(result.beneish, dict):
+            raw = result.beneish
+        else:
+            raw = result.beneish.to_dict()
         components = {k: raw[k] for k in ("dsri", "gmi", "aqi", "sgi", "depi", "sgai", "lvgi", "tata") if k in raw}
         beneish = {
             "m_score": raw.get("m_score"),
@@ -124,6 +136,10 @@ def _format_section(data, result) -> dict:
         }
         if components:
             beneish["components"] = components
+
+    # Banking: trả về object banking nếu có
+    if hasattr(result, "banking") and result.banking:
+        banking = result.banking if isinstance(result.banking, dict) else result.banking.to_dict()
 
     return {
         "label": label,
@@ -138,6 +154,7 @@ def _format_section(data, result) -> dict:
         "cashflow": cashflow,
         "beneish": beneish,
         "flags": [f.to_dict() for f in result.flags],
+            **({"banking": banking} if banking else {}),
     }
 
 

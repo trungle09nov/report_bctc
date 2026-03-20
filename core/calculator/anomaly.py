@@ -13,6 +13,13 @@ class AnomalyDetector:
     def detect(self, data: ReportData, metrics: FinancialMetrics) -> list[Flag]:
         flags = []
 
+        # Ngân hàng: dùng bộ rules riêng (cấu trúc tài chính khác hoàn toàn)
+        if data.accounting_standard == AccountingStandard.TT49:
+            flags.extend(self._check_profitability(metrics))
+            flags.extend(self._check_revenue_decline(metrics))
+            # Bank-specific basic rules (banking metrics chưa có ở đây — detect_advanced sẽ bổ sung)
+            return flags
+
         flags.extend(self._check_holding_company(data, metrics))
         flags.extend(self._check_receivables(data, metrics))
         flags.extend(self._check_capex_completion(data))
@@ -213,14 +220,150 @@ class AnomalyDetector:
             ))
         return flags
 
-    def detect_advanced(self, data, metrics, cf_metrics, beneish) -> list[Flag]:
-        """Anomaly rules nâng cao dùng CashFlowMetrics và BeneishScore"""
+    def detect_advanced(self, data, metrics, cf_metrics, beneish, banking=None) -> list[Flag]:
+        """Anomaly rules nâng cao dùng CashFlowMetrics, BeneishScore và BankingMetrics"""
         std = getattr(data, 'accounting_standard', None)
         flags = []
+
+        # Ngân hàng: dùng rules chuyên biệt
+        if std == AccountingStandard.TT49:
+            if banking is not None:
+                flags.extend(self._check_bank_nim(banking))
+                flags.extend(self._check_bank_cir(banking))
+                flags.extend(self._check_bank_ldr(banking))
+                flags.extend(self._check_bank_credit_cost(banking))
+                flags.extend(self._check_bank_growth(banking))
+            return flags
+
         flags.extend(self._check_earnings_quality(metrics, cf_metrics, std))
         flags.extend(self._check_fcf(metrics, cf_metrics, std))
         flags.extend(self._check_ccc(cf_metrics))
         flags.extend(self._check_beneish(beneish))
+        return flags
+
+    # ── Banking-specific rules ─────────────────────────────────────────────
+
+    def _check_bank_nim(self, b) -> list[Flag]:
+        flags = []
+        if b.nim is None:
+            return flags
+        if b.nim < 2.0:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="BANK_LOW_NIM",
+                message=(
+                    f"NIM = {b.nim:.2f}% — biên lãi thuần thấp. "
+                    "Có thể do áp lực cạnh tranh lãi suất, cơ cấu tài sản sinh lãi thấp, "
+                    "hoặc chi phí vốn huy động cao."
+                ),
+                detail={"nim_pct": b.nim}
+            ))
+        elif b.nim > 6.0:
+            flags.append(Flag(
+                type=FlagType.INFO,
+                code="BANK_HIGH_NIM",
+                message=(
+                    f"NIM = {b.nim:.2f}% — biên lãi thuần cao. "
+                    "Thường gặp ở ngân hàng cho vay bán lẻ/tiêu dùng (rủi ro tín dụng cao hơn). "
+                    "Cần theo dõi song song với NPL."
+                ),
+                detail={"nim_pct": b.nim}
+            ))
+        return flags
+
+    def _check_bank_cir(self, b) -> list[Flag]:
+        flags = []
+        if b.cir is None:
+            return flags
+        if b.cir > 60:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="BANK_HIGH_CIR",
+                message=(
+                    f"CIR (Cost-to-Income) = {b.cir:.1f}% — hiệu quả chi phí thấp. "
+                    "Ngân hàng tốt thường duy trì CIR < 45%. "
+                    "Cần xem xét tối ưu chi phí vận hành."
+                ),
+                detail={"cir_pct": b.cir}
+            ))
+        elif b.cir < 30:
+            flags.append(Flag(
+                type=FlagType.INFO,
+                code="BANK_EXCELLENT_CIR",
+                message=(
+                    f"CIR = {b.cir:.1f}% — hiệu quả chi phí xuất sắc. "
+                    "Phần lớn thu nhập chuyển thành lợi nhuận."
+                ),
+                detail={"cir_pct": b.cir}
+            ))
+        return flags
+
+    def _check_bank_ldr(self, b) -> list[Flag]:
+        flags = []
+        if b.ldr is None:
+            return flags
+        if b.ldr > 90:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="BANK_HIGH_LDR",
+                message=(
+                    f"LDR (Loan-to-Deposit) = {b.ldr:.1f}% — tỷ lệ cho vay/huy động cao. "
+                    "Ngưỡng NHNN khuyến nghị ≤ 85%. Rủi ro thanh khoản nếu huy động tăng chậm."
+                ),
+                detail={"ldr_pct": b.ldr}
+            ))
+        return flags
+
+    def _check_bank_credit_cost(self, b) -> list[Flag]:
+        flags = []
+        if b.credit_cost is None:
+            return flags
+        if b.credit_cost > 2.5:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="BANK_HIGH_CREDIT_COST",
+                message=(
+                    f"Credit cost (annualized) = {b.credit_cost:.2f}% — "
+                    "chi phí dự phòng rủi ro tín dụng cao. "
+                    "Dấu hiệu chất lượng tài sản đang xấu đi hoặc trích lập dự phòng tích cực."
+                ),
+                detail={"credit_cost_pct": b.credit_cost}
+            ))
+        elif b.credit_cost < 0.3:
+            flags.append(Flag(
+                type=FlagType.INFO,
+                code="BANK_LOW_CREDIT_COST",
+                message=(
+                    f"Credit cost = {b.credit_cost:.2f}% — trích lập dự phòng thấp. "
+                    "Có thể phản ánh chất lượng tín dụng tốt hoặc chưa trích lập đầy đủ."
+                ),
+                detail={"credit_cost_pct": b.credit_cost}
+            ))
+        return flags
+
+    def _check_bank_growth(self, b) -> list[Flag]:
+        flags = []
+        if b.loan_growth is not None and b.loan_growth > 25:
+            flags.append(Flag(
+                type=FlagType.INFO,
+                code="BANK_RAPID_LOAN_GROWTH",
+                message=(
+                    f"Tín dụng tăng {b.loan_growth:.1f}% YoY — tốc độ cao. "
+                    "Tăng trưởng tốt nếu đi kèm chất lượng tín dụng; "
+                    "cần theo dõi NPL trong các kỳ tiếp theo."
+                ),
+                detail={"loan_growth_pct": b.loan_growth}
+            ))
+        if b.nii_growth is not None and b.nii_growth < -10:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="BANK_NII_DECLINE",
+                message=(
+                    f"Thu nhập lãi thuần (NII) giảm {abs(b.nii_growth):.1f}% YoY. "
+                    "Có thể do thu hẹp NIM, tín dụng tăng chậm, hoặc nợ xấu gia tăng."
+                ),
+                detail={"nii_growth_pct": b.nii_growth}
+            ))
         return flags
 
     def _check_earnings_quality(self, metrics, cf_metrics, std=None) -> list[Flag]:

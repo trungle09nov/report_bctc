@@ -18,6 +18,7 @@ from core.parser.company_extractor import CompanyExtractor
 from core.parser.mapping import (
     BALANCE_SHEET_MAPPING, INCOME_STMT_MAPPING, CASHFLOW_MAPPING,
     TT210_BALANCE_SHEET_MAPPING, TT210_INCOME_MAPPING, TT210_CASHFLOW_MAPPING,
+    TT49_BALANCE_SHEET_KEYWORDS, TT49_INCOME_KEYWORDS,
     get_mappings_for_standard,
 )
 
@@ -34,6 +35,9 @@ class AdaptiveMarkdownParser:
         "bảng cân đối kế toán", "tài sản ngắn hạn", "tổng cộng tài sản",
         "b 01", "mẫu b01", "tình hình tài chính",
         "tài sản dài hạn", "nợ phải trả", "vốn chủ sở hữu",
+        # TT49 bank: chỉ dùng tiêu đề bảng, không dùng tên khoản mục
+        # để tránh parse nhầm bảng thuyết minh chi tiết
+        "báo cáo tình hình tài chính",
     ]
     INCOME_SIGNALS = [
         "kết quả kinh doanh", "doanh thu thuần", "lợi nhuận gộp",
@@ -42,6 +46,9 @@ class AdaptiveMarkdownParser:
         # TT210 specific
         "cộng doanh thu hoạt động", "chi phí hoạt động",
         "lãi từ các tài sản tài chính", "lợi nhuận kế toán sau thuế",
+        # TT49 bank specific
+        "thu nhập lãi thuần", "thu nhập lãi và các khoản tương tự",
+        "báo cáo thu nhập", "kết quả hoạt động kinh doanh",
     ]
     CASHFLOW_SIGNALS = [
         "lưu chuyển tiền", "tiền thu từ", "tiền chi", "b 03", "mẫu b03",
@@ -107,8 +114,9 @@ class AdaptiveMarkdownParser:
         data.period = self._extract_period(content)
         data.report_date = self._extract_report_date(content)
 
-        # Detect đơn vị tiền tệ (mặc định VND, một số cty dùng triệu)
-        unit_multiplier = self.number_parser.detect_unit_multiplier(content[:500])
+        # Detect đơn vị tiền tệ — tìm trong 5000 ký tự đầu để bao phủ cả bảng đầu tiên
+        # (một số file ngân hàng có cover letter trước bảng nên "triệu đồng" xuất hiện muộn hơn)
+        unit_multiplier = self.number_parser.detect_unit_multiplier(content[:5000])
 
         # Convert markdown pipe tables → HTML trước khi parse
         content_html = self._convert_md_tables_to_html(content)
@@ -130,16 +138,29 @@ class AdaptiveMarkdownParser:
                 continue
 
             # Detect loại bảng
+            is_bank = data.accounting_standard == AccountingStandard.TT49
             if self._matches(context_lower, self.BALANCE_SHEET_SIGNALS):
-                self._parse_table(
-                    table_soup, data.balance_sheet_current, data.balance_sheet_prev,
-                    bs_mapping, "balance_sheet", unit_multiplier
-                )
+                if is_bank:
+                    self._parse_bank_table(
+                        table_soup, data.balance_sheet_current, data.balance_sheet_prev,
+                        TT49_BALANCE_SHEET_KEYWORDS, "balance_sheet", unit_multiplier
+                    )
+                else:
+                    self._parse_table(
+                        table_soup, data.balance_sheet_current, data.balance_sheet_prev,
+                        bs_mapping, "balance_sheet", unit_multiplier
+                    )
             elif self._matches(context_lower, self.INCOME_SIGNALS):
-                self._parse_table(
-                    table_soup, data.income_current, data.income_prev,
-                    income_mapping, "income", unit_multiplier
-                )
+                if is_bank:
+                    self._parse_bank_table(
+                        table_soup, data.income_current, data.income_prev,
+                        TT49_INCOME_KEYWORDS, "income", unit_multiplier
+                    )
+                else:
+                    self._parse_table(
+                        table_soup, data.income_current, data.income_prev,
+                        income_mapping, "income", unit_multiplier
+                    )
             elif self._matches(context_lower, self.CASHFLOW_SIGNALS):
                 self._parse_table(
                     table_soup, data.cashflow_current, data.cashflow_prev,
@@ -266,6 +287,107 @@ class AdaptiveMarkdownParser:
             if metrics and name not in ('Loại trừ', 'Tổng cộng', '')
         ]
 
+    def _detect_bank_income_period_cols(self, rows: list) -> tuple[Optional[int], Optional[int]]:
+        """
+        Phát hiện cột giá trị cho bảng KQKD ngân hàng dạng 6 cột:
+          label | thuyết minh | Năm nay (Q) | Năm trước (Q) | Năm nay (LK) | Năm trước (LK)
+        Trả về (value_col, prev_col) = (col của "Năm nay" đầu tiên, col kề sau).
+        """
+        for row in rows[:4]:
+            cells = row.find_all(['td', 'th'])
+            first_namnay = None
+            first_namtruoc = None
+            for i, cell in enumerate(cells):
+                text = cell.get_text(strip=True).lower()
+                if text == 'năm nay' and first_namnay is None:
+                    first_namnay = i
+                elif text == 'năm trước' and first_namtruoc is None:
+                    first_namtruoc = i
+            if first_namnay is not None:
+                return first_namnay, first_namtruoc if first_namtruoc is not None else first_namnay + 1
+        return None, None
+
+    def _parse_bank_table(
+        self,
+        soup: BeautifulSoup,
+        section_current: FinancialSection,
+        section_prev: FinancialSection,
+        keyword_map: dict,
+        table_type: str,
+        unit_multiplier: float = 1.0,
+    ):
+        """
+        Parse bảng BCTC ngân hàng bằng keyword matching trên nhãn dòng.
+        Dùng cho TT49 — không có cột mã số chuẩn như TT200/TT210.
+        Schema detector vẫn được dùng để tìm cột giá trị, nhưng với bảng KQKD
+        6 cột (có "Năm nay"/"Năm trước"), sẽ override bằng _detect_bank_income_period_cols.
+        """
+        import re as _re
+        rows = soup.find_all('tr')
+        if not rows:
+            return
+
+        schema = self.schema_detector.detect(soup)
+
+        # Override cột cho bảng KQKD ngân hàng dạng "Năm nay"/"Năm trước"
+        bank_val_col, bank_prev_col = self._detect_bank_income_period_cols(rows)
+        if bank_val_col is not None:
+            value_col = bank_val_col
+            prev_col = bank_prev_col
+            logger.debug(
+                f"[bank_{table_type}] Override cols from 'Năm nay': "
+                f"val={value_col} prev={prev_col}"
+            )
+        else:
+            value_col = schema.value_col
+            prev_col = schema.prev_col
+
+        parsed_count = 0
+        for row in rows:
+            cells = row.find_all(['td', 'th'])
+            if len(cells) < 2:
+                continue
+
+            # Tìm label: thử cột 0 và cột 1, lấy cột có text dài hơn
+            label_raw = ""
+            for col_idx in range(min(2, len(cells))):
+                candidate = cells[col_idx].get_text(separator=' ', strip=True)
+                if len(candidate) > len(label_raw):
+                    label_raw = candidate
+
+            # Làm sạch: bỏ marker bold/italic và prefix số/chữ số La Mã
+            label_clean = _re.sub(r'\*+', '', label_raw)
+            label_clean = _re.sub(r'^\s*[\d]+[\s.]+', '', label_clean)  # "1. " hay "10. "
+            label_lower = label_clean.lower().strip()
+
+            if not label_lower or len(label_lower) < 4:
+                continue
+
+            # Khớp với keyword map (theo thứ tự — specific trước)
+            matched_key = None
+            for semantic_key, keywords in keyword_map.items():
+                for kw in keywords:
+                    if kw in label_lower:
+                        matched_key = semantic_key
+                        break
+                if matched_key:
+                    break
+
+            if not matched_key:
+                continue
+
+            # Extract giá trị current và prev
+            current_val = self._get_cell_value(cells, value_col, unit_multiplier)
+            prev_val = self._get_cell_value(cells, prev_col, unit_multiplier)
+
+            if current_val is not None:
+                section_current.items[matched_key] = current_val
+                parsed_count += 1
+            if prev_val is not None:
+                section_prev.items[matched_key] = prev_val
+
+        logger.debug(f"[bank_{table_type}] Parsed {parsed_count} items via keyword matching")
+
     # ── Helper methods ────────────────────────────────────────────────────────
 
     def _detect_accounting_standard(self, content: str) -> AccountingStandard:
@@ -291,8 +413,8 @@ class AdaptiveMarkdownParser:
     def _extract_period(self, content: str) -> str:
         """Extract kỳ báo cáo từ nhiều format khác nhau"""
         patterns = [
-            # "QUÝ IV/2025" hoặc "Quý IV năm 2025"
-            (r'QUÝ\s+(I{1,3}V?|IV)\s*[/\-]?\s*(\d{4})', 'quarter'),
+            # "QUÝ IV/2025" hoặc "Quý IV năm 2025" (có "năm" giữa quý và năm)
+            (r'QUÝ\s+(I{1,3}V?|IV)\s*(?:[/\-]\s*|NĂM\s+)(\d{4})', 'quarter'),
             # "Q4 2025" hoặc "Q4/2025"
             (r'Q([1-4])[/\s\-](\d{4})', 'q_short'),
             # "6 tháng đầu năm 2025"

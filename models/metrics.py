@@ -67,12 +67,59 @@ class FinancialMetrics:
 
 
 @dataclass
+
+class BankingMetrics:
+    """Chỉ số đặc thù ngân hàng (TT49) — Python tính, LLM chỉ diễn giải"""
+
+    npl: Optional[float] = None                  # Non-performing loans (nợ xấu)
+    llr_npl: Optional[float] = None              # Tỷ lệ dự phòng bao nợ xấu
+    car: Optional[float] = None                  # Hệ số an toàn vốn (CAR)
+    casa: Optional[float] = None                 # CASA ratio
+    non_interest_income: Optional[float] = None  # Thu nhập ngoài lãi
+
+    # ── Thu nhập (tỷ đồng) ───────────────────────────────────────────
+    interest_income: Optional[float] = None          # Thu nhập lãi
+    interest_expense: Optional[float] = None         # Chi phí lãi
+    net_interest_income: Optional[float] = None      # NII = Thu nhập lãi thuần
+    net_interest_income_prev: Optional[float] = None
+    net_fee_income: Optional[float] = None           # Lãi thuần dịch vụ
+    total_operating_income: Optional[float] = None   # TOI = Tổng thu nhập HĐ
+    total_operating_income_prev: Optional[float] = None
+    operating_expense: Optional[float] = None        # OPEX = Chi phí hoạt động
+    pre_provision_profit: Optional[float] = None     # PPOP = LN trước dự phòng
+    loan_loss_provision: Optional[float] = None      # CP dự phòng RRTD
+
+    # ── Bảng cân đối (tỷ đồng) ───────────────────────────────────────
+    loans_gross: Optional[float] = None              # Dư nợ cho vay KH (gộp)
+    loans_gross_prev: Optional[float] = None
+    loan_provisions_balance: Optional[float] = None  # Dự phòng trên BCĐKT
+    customer_deposits: Optional[float] = None        # Tiền gửi KH
+    customer_deposits_prev: Optional[float] = None
+
+    # ── Tỷ số đặc thù ngân hàng (%) ─────────────────────────────────
+    nim: Optional[float] = None       # Net Interest Margin (annualized)
+    ldr: Optional[float] = None       # Loan-to-Deposit Ratio
+    cir: Optional[float] = None       # Cost-to-Income Ratio
+    credit_cost: Optional[float] = None  # Provision / Avg Loans (annualized)
+
+    # ── Tăng trưởng (%) ──────────────────────────────────────────────
+    nii_growth: Optional[float] = None     # % tăng NII YoY
+    toi_growth: Optional[float] = None     # % tăng TOI YoY
+    loan_growth: Optional[float] = None    # % tăng dư nợ YoY
+    deposit_growth: Optional[float] = None # % tăng tiền gửi YoY
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+
+@dataclass
 class AnalysisResult:
     """Kết quả phân tích đầy đủ"""
     metrics: FinancialMetrics = field(default_factory=FinancialMetrics)
     dupont: Optional["DuPontMetrics"] = None
     cashflow: Optional["CashFlowMetrics"] = None
     beneish: Optional["BeneishScore"] = None
+    banking: Optional["BankingMetrics"] = None
     flags: list[Flag] = field(default_factory=list)
     llm_analysis: dict = field(default_factory=dict)
     segment_analysis: list[dict] = field(default_factory=list)
@@ -90,6 +137,8 @@ class AnalysisResult:
             result["cashflow"] = self.cashflow.to_dict()
         if self.beneish:
             result["beneish"] = self.beneish.to_dict()
+        if self.banking:
+            result["banking"] = self.banking.to_dict()
         return result
 
 

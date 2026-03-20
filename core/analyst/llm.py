@@ -67,7 +67,11 @@ class LLMAnalyst:
         if not self.client:
             raise RuntimeError("LLM client chưa được khởi tạo (thiếu API key)")
             
-        prompt = build_analysis_prompt(data, result.metrics, result.flags, language, dupont=result.dupont, cashflow=result.cashflow, beneish=result.beneish)
+        prompt = build_analysis_prompt(
+            data, result.metrics, result.flags, language,
+            dupont=result.dupont, cashflow=result.cashflow,
+            beneish=result.beneish, banking=result.banking,
+        )
 
         try:
             response = self.client.chat.completions.create(
