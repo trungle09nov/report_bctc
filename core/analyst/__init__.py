@@ -101,15 +101,6 @@ class FinBotService:
                 "note": "Beneish M-Score not applicable for banks (TT49)"
             }
 
-        # 5. Beneish M-Score — skip cho ngân hàng (model calibrate cho doanh nghiệp)
-        beneish = None
-        if data.accounting_standard != AccountingStandard.TT49:
-            try:
-                cfo = cashflow.cfo if cashflow else None
-                beneish = self.beneish_calc.calculate(data, metrics, cfo=cfo)
-            except Exception as e:
-                logger.warning(f"Beneish calc error: {e}")
-
         # 6. Anomaly detection — basic + advanced
         flags = self.detector.detect(data, metrics)
         try:

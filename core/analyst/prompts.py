@@ -93,10 +93,11 @@ def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=Non
         key_figures["ln_cty_con_chuyen_ve_ty"] = metrics.subsidiary_income
 
     # Build extra sections
-    dupont_str = json.dumps(dupont.to_dict(), ensure_ascii=False, indent=2) if dupont else "Không có"
-    cf_str = json.dumps(cashflow.to_dict(), ensure_ascii=False, indent=2) if cashflow else "Không có"
-    beneish_str = json.dumps(beneish.to_dict(), ensure_ascii=False, indent=2) if beneish else "Không có"
-    banking_str = json.dumps(banking.to_dict(), ensure_ascii=False, indent=2) if banking else "Không có"
+    def _to_dict(obj): return obj if isinstance(obj, dict) else obj.to_dict()
+    dupont_str  = json.dumps(_to_dict(dupont),   ensure_ascii=False, indent=2) if dupont   else "Không có"
+    cf_str      = json.dumps(_to_dict(cashflow), ensure_ascii=False, indent=2) if cashflow else "Không có"
+    beneish_str = json.dumps(_to_dict(beneish),  ensure_ascii=False, indent=2) if beneish  else "Không có"
+    banking_str = json.dumps(_to_dict(banking),  ensure_ascii=False, indent=2) if banking  else "Không có"
 
     prompt = f"""Phân tích báo cáo tài chính sau:
 
