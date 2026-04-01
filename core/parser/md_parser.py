@@ -92,6 +92,21 @@ class MarkdownParser:
             q = m.group(1).upper()
             y = m.group(2)
             data.period = f"{quarter_map.get(q, q)}/{y}"
+        else:
+            # BCTC năm: "cho năm tài chính kết thúc ngày 31/12/YYYY" hoặc "Năm YYYY" trong header KQKD
+            m_annual = re.search(
+                r"(?:cho\s+)?năm\s+tài\s+chính\s+kết\s+thúc.*?(\d{4})"
+                r"|năm\s+tài\s+chính.*?(\d{4})"
+                r"|(?:^|\n)\s*Năm\s+(\d{4})\s*(?:\n|$)",
+                content, re.IGNORECASE | re.MULTILINE
+            )
+            if not m_annual:
+                # Fallback: header BCKQKD/LCTT có cột "Năm 2025"
+                m_annual = re.search(r"Năm\s+(20\d{2})", content)
+            if m_annual:
+                y = next(g for g in m_annual.groups() if g)
+                data.period = f"FY{y}"
+                data.is_annual = True
 
         # Report date
         m = re.search(r"ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})", content, re.IGNORECASE)

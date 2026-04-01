@@ -119,8 +119,11 @@ class FinancialCalculator:
             assets_avg = self._average(m.total_assets, to_billion(bs_p.get("270")))
 
         # TT210 income dùng YTD (lũy kế cả năm) → không nhân ×4
-        # TT200/TT49 dùng số liệu của 1 quý → nhân ×4 để annualize
-        annualize = 1 if std == AccountingStandard.TT210 else 4
+        # TT200 quý → nhân ×4 để annualize; TT200 năm (is_annual) → không nhân
+        if std == AccountingStandard.TT210 or getattr(data, "is_annual", False):
+            annualize = 1
+        else:
+            annualize = 4
 
         m.roe = safe_divide(m.net_profit, equity_avg)
         if m.roe:
@@ -187,6 +190,9 @@ class FinancialCalculator:
         if m.subsidiary_income and m.net_profit and m.net_profit != 0:
             m.subsidiary_income_ratio = abs(m.subsidiary_income / m.net_profit) * 100
 
+        # ── Phân tích dọc (Common-Size) ───────────────────────────────────────
+        self._calculate_common_size(data, m)
+
         # ── Round tất cả về 2 chữ số thập phân ──────────────────────────────
         self._round_metrics(m)
 
@@ -212,3 +218,22 @@ class FinancialCalculator:
         for field_name, value in m.__dict__.items():
             if isinstance(value, float):
                 setattr(m, field_name, round(value, 2))
+
+    def _calculate_common_size(self, data: ReportData, m: FinancialMetrics):
+        """Tính toán tỷ trọng các khoản mục so với Tổng tài sản (BS) và Doanh thu (IS)"""
+        bs = data.balance_sheet_current
+        inc = data.income_current
+
+        # Tính cho Bảng CĐKT (chia cho Tổng Tài sản)
+        if m.total_assets and m.total_assets > 0:
+            for code, val in bs.items.items():
+                val_bil = val / 1_000_000_000 if val else 0
+                if val_bil != 0:
+                    m.common_size_bs[code] = round((val_bil / m.total_assets) * 100, 2)
+
+        # Tính cho Kết quả Kinh doanh (chia cho Doanh thu thuần)
+        if m.revenue and m.revenue > 0:
+            for code, val in inc.items.items():
+                val_bil = val / 1_000_000_000 if val else 0
+                if val_bil != 0:
+                    m.common_size_is[code] = round((val_bil / m.revenue) * 100, 2)

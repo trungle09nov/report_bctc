@@ -14,6 +14,9 @@ Bạn có kiến thức sâu về chuẩn mực kế toán VAS (Thông tư 200, 
 6. Câu văn ngắn gọn, rõ ràng, tránh hoa mỹ
 7. Với ngân hàng (TT49): ưu tiên phân tích NIM, CIR, LDR, tăng trưởng tín dụng/huy động thay vì gross margin/inventory
 8. Với ngân hàng: "revenue" trong metrics = Tổng thu nhập hoạt động (TOI), "operating_profit" = PPOP
+9. KHÔNG so sánh chỉ số vận hành giữa nhóm Financials (ngân hàng/chứng khoán/bảo hiểm) và các nhóm còn lại — đây là hai loại đòn bẩy hoàn toàn khác nhau (tài chính vs sản xuất)
+10. Với BĐS (VIC, VHM): doanh thu ghi nhận theo bàn giao dự án, dòng tiền không đều — không đánh giá như doanh nghiệp sản xuất thông thường
+11. Với chứng khoán (TT210): CFO âm là bình thường do trading proprietary, không phải dấu hiệu rủi ro thanh khoản
 
 ## FORMAT ĐẦU RA
 Trả về JSON hợp lệ (không có markdown fence, không có text ngoài JSON):
@@ -63,7 +66,7 @@ Trả về JSON:
 }"""
 
 
-def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=None, cashflow=None, beneish=None, banking=None) -> str:
+def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=None, cashflow=None, beneish=None, banking=None, securities=None, real_estate=None, rubber=None, insurance=None, sector_info: dict | None = None) -> str:
     """Build user prompt với data đã tính sẵn"""
     import json
 
@@ -97,7 +100,22 @@ def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=Non
     dupont_str  = json.dumps(_to_dict(dupont),   ensure_ascii=False, indent=2) if dupont   else "Không có"
     cf_str      = json.dumps(_to_dict(cashflow), ensure_ascii=False, indent=2) if cashflow else "Không có"
     beneish_str = json.dumps(_to_dict(beneish),  ensure_ascii=False, indent=2) if beneish  else "Không có"
-    banking_str = json.dumps(_to_dict(banking),  ensure_ascii=False, indent=2) if banking  else "Không có"
+    banking_str    = json.dumps(_to_dict(banking),     ensure_ascii=False, indent=2) if banking     else "Không có"
+    securities_str = json.dumps(_to_dict(securities),  ensure_ascii=False, indent=2) if securities  else "Không có"
+    re_str         = json.dumps(_to_dict(real_estate), ensure_ascii=False, indent=2) if real_estate else "Không có"
+    rubber_str     = json.dumps(_to_dict(rubber),      ensure_ascii=False, indent=2) if rubber      else "Không có"
+    ins_str        = json.dumps(_to_dict(insurance),   ensure_ascii=False, indent=2) if insurance   else "Không có"
+
+    # Sector context
+    if sector_info:
+        sector_label  = sector_info.get("label", "")
+        sector_group  = sector_info.get("sector", "")
+        profit_driver = sector_info.get("profit_driver", "")
+        sector_line   = f"- Nhóm ngành: {sector_group.upper()} — {sector_label}"
+        driver_line   = f"- Profit driver chính: {profit_driver}" if profit_driver else ""
+    else:
+        sector_line = ""
+        driver_line = ""
 
     prompt = f"""Phân tích báo cáo tài chính sau:
 
@@ -107,6 +125,8 @@ def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=Non
 - Chuẩn kế toán: {data.accounting_standard.value.upper()} ({"Ngân hàng TT49" if data.accounting_standard.value == "tt49" else "Chứng khoán TT210" if data.accounting_standard.value == "tt210" else "Doanh nghiệp TT200/202"})
 - Loại báo cáo: {"Hợp nhất (Consolidated)" if data.is_consolidated else "Công ty mẹ riêng lẻ (Parent Only)"}
 - Holding company: {"CÓ — chủ yếu đầu tư vào công ty con" if data.is_holding_company else "Không"}
+{sector_line}
+{driver_line}
 
 ## CHỈ SỐ TÀI CHÍNH (đã tính bằng Python — dùng trực tiếp, không tính lại)
 {json.dumps(metrics.to_dict(), ensure_ascii=False, indent=2)}
@@ -131,6 +151,15 @@ def build_analysis_prompt(data, metrics, flags, language: str = "vi", dupont=Non
 
 ## CHỈ SỐ NGÂN HÀNG CHUYÊN BIỆT (NIM, LDR, CIR, credit cost — chỉ có với TT49)
 {banking_str}
+
+## CHỈ SỐ CHỨNG KHOÁN CHUYÊN BIỆT (FVTPL, margin lending, cơ cấu DT — chỉ có với TT210)
+{securities_str}
+
+## CHỈ SỐ BẤT ĐỘNG SẢN CHUYÊN BIỆT (tiền đặt cọc/backlog, tồn kho BĐS — chỉ có với TT200 BĐS)
+{re_str}
+
+## CHỈ SỐ BẢO HIỂM CHUYÊN BIỆT (combined ratio, loss ratio — chỉ có với BVH và tương tự)
+{ins_str}
 
 ## THUYẾT MINH (trích)
 {data.notes_text[:1000] if data.notes_text else "Không có"}

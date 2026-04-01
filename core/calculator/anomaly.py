@@ -220,12 +220,16 @@ class AnomalyDetector:
             ))
         return flags
 
-    def detect_advanced(self, data, metrics, cf_metrics, beneish, banking=None) -> list[Flag]:
-        """Anomaly rules nâng cao dùng CashFlowMetrics, BeneishScore và BankingMetrics"""
-        std = getattr(data, 'accounting_standard', None)
-        flags = []
+    def detect_advanced(self, data, metrics, cf_metrics, beneish, banking=None,
+                        securities=None, real_estate=None, insurance=None) -> list[Flag]:
+        """Anomaly rules nâng cao dùng sector-specific metrics"""
+        from core.parser.company_extractor import VN30_SECTOR_MAP
+        std    = getattr(data, 'accounting_standard', None)
+        ticker = (getattr(data, 'company_code', '') or '').upper()
+        sub    = VN30_SECTOR_MAP.get(ticker, {}).get("sub", "")
+        flags  = []
 
-        # Ngân hàng: dùng rules chuyên biệt
+        # Ngân hàng: dùng rules chuyên biệt, bỏ qua rules thông thường
         if std == AccountingStandard.TT49:
             if banking is not None:
                 flags.extend(self._check_bank_nim(banking))
@@ -235,10 +239,30 @@ class AnomalyDetector:
                 flags.extend(self._check_bank_growth(banking))
             return flags
 
+        # Chứng khoán (TT210): rules riêng, bỏ qua CCC/Beneish (không áp dụng)
+        if std == AccountingStandard.TT210:
+            if securities is not None:
+                flags.extend(self._check_securities_margin(securities))
+                flags.extend(self._check_securities_prop_trading(securities))
+            flags.extend(self._check_earnings_quality(metrics, cf_metrics, std))
+            return flags  # Skip CCC và Beneish cho TT210
+
+        # TT200/202 — doanh nghiệp thông thường
         flags.extend(self._check_earnings_quality(metrics, cf_metrics, std))
         flags.extend(self._check_fcf(metrics, cf_metrics, std))
         flags.extend(self._check_ccc(cf_metrics))
         flags.extend(self._check_beneish(beneish))
+
+        # Sector-specific rules cho TT200
+        if real_estate is not None:
+            flags.extend(self._check_real_estate_advance(real_estate, metrics))
+
+        if insurance is not None:
+            flags.extend(self._check_insurance_combined_ratio(insurance))
+
+        if sub in ("oil_gas", "power"):
+            flags.extend(self._check_utilities_capex(metrics, sub))
+
         return flags
 
     # ── Banking-specific rules ─────────────────────────────────────────────
@@ -363,6 +387,171 @@ class AnomalyDetector:
                     "Có thể do thu hẹp NIM, tín dụng tăng chậm, hoặc nợ xấu gia tăng."
                 ),
                 detail={"nii_growth_pct": b.nii_growth}
+            ))
+        return flags
+
+    # ── Securities-specific rules ──────────────────────────────────────────────
+
+    def _check_securities_margin(self, s) -> list[Flag]:
+        """Kiểm tra rủi ro đòn bẩy margin lending"""
+        flags = []
+        if s.margin_to_equity is None:
+            return flags
+        if s.margin_to_equity > 2.0:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="SEC_HIGH_MARGIN_LEVERAGE",
+                message=(
+                    f"Cho vay ký quỹ / VCSH = {s.margin_to_equity:.2f}x — đòn bẩy margin cao. "
+                    "Rủi ro tăng khi thị trường điều chỉnh mạnh: call margin hàng loạt "
+                    "có thể gây áp lực bán tháo và lỗ tín dụng."
+                ),
+                detail={"margin_to_equity": s.margin_to_equity, "margin_loans_bil": s.margin_loans}
+            ))
+        if s.fvtpl_to_equity is not None and s.fvtpl_to_equity > 1.5:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="SEC_HIGH_FVTPL_EXPOSURE",
+                message=(
+                    f"Tài sản FVTPL (tự doanh) / VCSH = {s.fvtpl_to_equity:.2f}x — "
+                    "exposure tự doanh lớn. Biến động thị trường sẽ ảnh hưởng trực tiếp đến KQKD."
+                ),
+                detail={"fvtpl_to_equity": s.fvtpl_to_equity, "fvtpl_assets_bil": s.fvtpl_assets}
+            ))
+        return flags
+
+    def _check_securities_prop_trading(self, s) -> list[Flag]:
+        """Kiểm tra tỷ trọng doanh thu tự doanh"""
+        flags = []
+        if s.prop_trading_ratio is None or s.brokerage_ratio is None:
+            return flags
+        # Tự doanh âm (lỗ) nhưng chiếm tỷ trọng lớn
+        if s.prop_trading_pnl is not None and s.prop_trading_pnl < 0:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="SEC_PROP_TRADING_LOSS",
+                message=(
+                    f"Tự doanh lỗ ({s.prop_trading_pnl:.0f} tỷ, "
+                    f"{abs(s.prop_trading_ratio):.1f}% DT HĐ). "
+                    "Môi giới và dịch vụ cần bù đắp khoản lỗ này."
+                ),
+                detail={"prop_trading_pnl_bil": s.prop_trading_pnl,
+                        "prop_trading_ratio_pct": s.prop_trading_ratio}
+            ))
+        # Phụ thuộc quá cao vào tự doanh (rủi ro biến động)
+        if s.prop_trading_ratio is not None and s.prop_trading_ratio > 50:
+            flags.append(Flag(
+                type=FlagType.INFO,
+                code="SEC_HIGH_PROP_TRADING_DEPENDENCE",
+                message=(
+                    f"Tự doanh chiếm {s.prop_trading_ratio:.1f}% tổng DT HĐ — "
+                    "phụ thuộc cao vào thị trường. Kết quả kinh doanh sẽ biến động theo HOSE/HNX."
+                ),
+                detail={"prop_trading_ratio_pct": s.prop_trading_ratio,
+                        "brokerage_ratio_pct": s.brokerage_ratio}
+            ))
+        return flags
+
+    # ── Real Estate-specific rules ─────────────────────────────────────────────
+
+    def _check_real_estate_advance(self, r, metrics) -> list[Flag]:
+        """Kiểm tra backlog (tiền đặt cọc) và tồn kho BĐS"""
+        flags = []
+
+        # Tiền đặt cọc giảm → tín hiệu xấu cho doanh thu tương lai
+        if r.advance_growth_yoy is not None and r.advance_growth_yoy < -20:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="RE_ADVANCE_DECLINE",
+                message=(
+                    f"Tiền đặt cọc khách hàng giảm {abs(r.advance_growth_yoy):.1f}% YoY "
+                    f"(còn {r.total_advance:.0f} tỷ). "
+                    "Đây là leading indicator — backlog giảm báo hiệu doanh thu tương lai có thể thấp."
+                ),
+                detail={"advance_growth_pct": r.advance_growth_yoy,
+                        "total_advance_bil": r.total_advance}
+            ))
+
+        # Tồn kho quá cao so với doanh thu (>10 kỳ chưa giải phóng được)
+        if r.inventory_to_revenue is not None and r.inventory_to_revenue > 10:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="RE_HIGH_INVENTORY",
+                message=(
+                    f"Tồn kho BĐS = {r.inventory_to_revenue:.1f}x doanh thu 1 kỳ. "
+                    "Có thể phản ánh dự án đang xây dựng (bình thường) hoặc hàng khó bán "
+                    "(cần xem thuyết minh chi tiết về tiến độ dự án)."
+                ),
+                detail={"inventory_to_revenue_x": r.inventory_to_revenue,
+                        "inventory_bil": r.inventory}
+            ))
+
+        return flags
+
+    # ── Insurance-specific rules ───────────────────────────────────────────────
+
+    def _check_insurance_combined_ratio(self, ins) -> list[Flag]:
+        """
+        Combined ratio > 100% = lỗ từ nghiệp vụ bảo hiểm (underwriting loss).
+        Phải bù bằng lãi đầu tư — mô hình rủi ro khi thị trường tài chính xấu.
+        """
+        flags = []
+        if ins.combined_ratio is None:
+            return flags
+
+        if ins.combined_ratio > 100:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="INS_UNDERWRITING_LOSS",
+                message=(
+                    f"Combined ratio = {ins.combined_ratio:.1f}% > 100% — "
+                    f"lỗ từ nghiệp vụ bảo hiểm (loss ratio {ins.loss_ratio:.1f}% + "
+                    f"expense ratio {ins.expense_ratio:.1f}%). "
+                    "Lợi nhuận phụ thuộc vào thu nhập đầu tư tài chính — "
+                    "rủi ro khi lãi suất/thị trường biến động."
+                ),
+                detail={"combined_ratio_pct": ins.combined_ratio,
+                        "loss_ratio_pct": ins.loss_ratio,
+                        "expense_ratio_pct": ins.expense_ratio}
+            ))
+        elif ins.combined_ratio < 90:
+            flags.append(Flag(
+                type=FlagType.INFO,
+                code="INS_STRONG_UNDERWRITING",
+                message=(
+                    f"Combined ratio = {ins.combined_ratio:.1f}% — nghiệp vụ bảo hiểm có lãi tốt. "
+                    "Underwriting profit + lãi đầu tư = nền tảng lợi nhuận bền vững."
+                ),
+                detail={"combined_ratio_pct": ins.combined_ratio}
+            ))
+        return flags
+
+    # ── Utilities-specific rules ───────────────────────────────────────────────
+
+    def _check_utilities_capex(self, metrics, sub: str) -> list[Flag]:
+        """
+        Ngành vốn nặng (oil_gas, power): capex_intensity thấp bất thường
+        có thể báo hiệu underinvestment → suy giảm năng lực sản xuất trong tương lai.
+        """
+        flags = []
+        if metrics.capex_intensity is None:
+            return flags
+
+        # Ngưỡng tối thiểu: oil_gas ≥ 5%, power ≥ 8% (capex bảo trì + mở rộng)
+        threshold = 8.0 if sub == "power" else 5.0
+
+        if metrics.capex_intensity < threshold:
+            flags.append(Flag(
+                type=FlagType.WARNING,
+                code="UTIL_LOW_CAPEX",
+                message=(
+                    f"Capex intensity = {metrics.capex_intensity:.1f}% doanh thu — "
+                    f"thấp hơn ngưỡng tối thiểu {threshold:.0f}% cho ngành {sub.replace('_',' ')}. "
+                    "Có thể phản ánh hoàn thành giai đoạn đầu tư lớn, "
+                    "hoặc underinvestment → rủi ro suy giảm năng lực trung hạn."
+                ),
+                detail={"capex_intensity_pct": metrics.capex_intensity,
+                        "threshold_pct": threshold, "sub_sector": sub}
             ))
         return flags
 

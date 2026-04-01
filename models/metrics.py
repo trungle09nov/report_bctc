@@ -54,6 +54,14 @@ class FinancialMetrics:
     subsidiary_income: Optional[float] = None
     subsidiary_income_ratio: Optional[float] = None  # % so LNST
 
+    # ── Sector-specific (TT200 — Manufacturing / Consumer) ───
+    sga_ratio: Optional[float] = None           # (Selling + Admin) / Revenue (%)
+    capex_intensity: Optional[float] = None     # Capex / Revenue (%)
+
+    # ── Phân tích dọc (Common-Size) ──────────────────────────
+    common_size_bs: dict = field(default_factory=dict)
+    common_size_is: dict = field(default_factory=dict)
+
     def to_dict(self) -> dict:
         """Chỉ trả về các field có giá trị"""
         return {k: v for k, v in self.__dict__.items() if v is not None}
@@ -120,6 +128,10 @@ class AnalysisResult:
     cashflow: Optional["CashFlowMetrics"] = None
     beneish: Optional["BeneishScore"] = None
     banking: Optional["BankingMetrics"] = None
+    securities: Optional["SecuritiesMetrics"] = None
+    real_estate: Optional["RealEstateMetrics"] = None
+    rubber: Optional["RubberMetrics"] = None
+    insurance: Optional["InsuranceMetrics"] = None
     flags: list[Flag] = field(default_factory=list)
     llm_analysis: dict = field(default_factory=dict)
     segment_analysis: list[dict] = field(default_factory=list)
@@ -139,6 +151,14 @@ class AnalysisResult:
             result["beneish"] = self.beneish.to_dict()
         if self.banking:
             result["banking"] = self.banking.to_dict()
+        if self.securities:
+            result["securities"] = self.securities.to_dict()
+        if self.real_estate:
+            result["real_estate"] = self.real_estate.to_dict()
+        if self.rubber:
+            result["rubber"] = self.rubber.to_dict()
+        if self.insurance:
+            result["insurance"] = self.insurance.to_dict()
         return result
 
 
@@ -213,6 +233,145 @@ class BeneishScore:
     m_score: Optional[float] = None
     interpretation: str = ""        # "likely_manipulator" / "gray_zone" / "likely_clean"
     confidence: str = ""            # "high" / "medium" / "low" (phụ thuộc data đủ không)
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+
+@dataclass
+class SecuritiesMetrics:
+    """
+    Chỉ số đặc thù công ty chứng khoán (TT210) — SSI, VND, HCM, MBS...
+    Driver lợi nhuận: thanh khoản thị trường + tự doanh (FVTPL) + margin lending
+    """
+
+    # ── Tài sản (tỷ đồng) ────────────────────────────────────────────────────
+    fvtpl_assets: Optional[float] = None        # Tài sản FVTPL (tự doanh) — BS 112
+    margin_loans: Optional[float] = None        # Dư nợ cho vay ký quỹ — BS 114
+    total_operating_revenue: Optional[float] = None
+    total_operating_revenue_prev: Optional[float] = None
+
+    # ── Cấu trúc doanh thu (tỷ đồng) ─────────────────────────────────────────
+    brokerage_revenue: Optional[float] = None   # Môi giới — Income 06
+    prop_trading_pnl: Optional[float] = None    # Tự doanh thuần (gains - losses) — 01 - 21
+    advisory_revenue: Optional[float] = None    # Tư vấn + tư vấn tài chính — 08 + 10
+    interest_income: Optional[float] = None     # Lãi từ cho vay + HTM + AFS — 02+03+04
+
+    # ── Tỷ trọng doanh thu (%) ────────────────────────────────────────────────
+    brokerage_ratio: Optional[float] = None     # Môi giới / Tổng DT HĐ
+    prop_trading_ratio: Optional[float] = None  # Tự doanh / Tổng DT HĐ
+    interest_ratio: Optional[float] = None      # Lãi vay KQ / Tổng DT HĐ
+
+    # ── Đòn bẩy & rủi ro ─────────────────────────────────────────────────────
+    margin_to_equity: Optional[float] = None    # Cho vay ký quỹ / VCSH — rủi ro đòn bẩy
+    fvtpl_to_equity: Optional[float] = None     # FVTPL / VCSH — rủi ro tự doanh
+
+    # ── Hiệu quả vận hành ─────────────────────────────────────────────────────
+    cir: Optional[float] = None                 # Admin expense / Total operating revenue (%)
+    revenue_growth_yoy: Optional[float] = None  # % tăng tổng DT HĐ YoY
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+
+@dataclass
+class RealEstateMetrics:
+    """
+    Chỉ số đặc thù bất động sản (TT200) — VIC, VHM, NVL, KDH...
+    BCTC khác biệt: doanh thu ghi nhận theo bàn giao, tiền đặt cọc là proxy backlog
+    """
+
+    # ── Backlog / Tiền đặt cọc (tỷ đồng) ────────────────────────────────────
+    advance_from_customers_st: Optional[float] = None  # Người mua trả tiền trước NH — BS 313
+    advance_from_customers_lt: Optional[float] = None  # Người mua trả tiền trước DH — BS 332
+    total_advance: Optional[float] = None              # Tổng tiền đặt cọc (ST + LT)
+    advance_prev: Optional[float] = None               # Kỳ trước (để tính tăng trưởng)
+
+    # ── Tồn kho BĐS (tỷ đồng) ────────────────────────────────────────────────
+    inventory: Optional[float] = None                  # Tổng HTK (BĐS đang XD + chờ bán)
+
+    # ── Tỷ số đặc thù ────────────────────────────────────────────────────────
+    advance_to_revenue: Optional[float] = None         # Tiền đặt cọc / DT kỳ (số kỳ coverage)
+    advance_to_equity: Optional[float] = None          # Tiền đặt cọc / VCSH — đòn bẩy từ KH
+    inventory_to_revenue: Optional[float] = None       # HTK / DT kỳ (kỳ thu hồi HTK)
+    inventory_to_equity: Optional[float] = None        # HTK / VCSH
+
+    # ── Chất lượng doanh thu ──────────────────────────────────────────────────
+    advance_growth_yoy: Optional[float] = None         # % tăng tiền đặt cọc YoY (leading indicator)
+    revenue_growth_yoy: Optional[float] = None         # % tăng DT — không đều theo chu kỳ dự án
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+
+@dataclass
+class RubberMetrics:
+    """
+    Chỉ số đặc thù ngành cao su (TT200) — GVR và tương tự.
+
+    GVR khác HPG ở 4 điểm cốt lõi:
+      1. Tài sản sinh học (vườn cây) hạch toán vào TSCĐ hữu hình — depreciation theo chu kỳ khai thác
+      2. Danh mục đầu tư tài chính lớn (tiền gửi + HTM) → thu nhập tài chính đáng kể
+      3. Phần lãi từ công ty liên kết (KCN) → đóng góp vào lợi nhuận nhưng không phải operating
+      4. Minority interest cao → lợi nhuận quy về cổ đông công ty mẹ thấp hơn LNST hợp nhất
+    """
+
+    # ── Thu nhập tài chính từ danh mục đầu tư (tỷ đồng) ─────────────────────
+    financial_income: Optional[float] = None          # Income code 21 — lãi tiền gửi + trái phiếu
+    financial_income_ratio: Optional[float] = None    # financial_income / revenue (%)
+
+    # ── Danh mục đầu tư tài chính (tỷ đồng) ─────────────────────────────────
+    investment_assets_st: Optional[float] = None      # BS 120 — đầu tư TC ngắn hạn (tiền gửi, HTM NH)
+    investment_assets_lt: Optional[float] = None      # BS 250 — đầu tư TC dài hạn
+    total_investment_assets: Optional[float] = None   # Tổng danh mục đầu tư
+    investment_yield: Optional[float] = None          # financial_income / total_investment_assets (%)
+
+    # ── Phần lãi từ công ty liên kết (KCN, liên doanh) (tỷ đồng) ────────────
+    share_of_associates: Optional[float] = None       # Income code 24 — liên kết / KCN
+    associates_to_profit: Optional[float] = None      # share_of_associates / operating_profit (%)
+
+    # ── Thu nhập khác (vườn cây thanh lý, chuyển nhượng đất) (tỷ đồng) ──────
+    other_income: Optional[float] = None              # Income code 31 — thường một lần (non-recurring)
+    other_income_ratio: Optional[float] = None        # other_income / gross_profit (%) — nếu >30% = flag
+
+    # ── Phân bổ lợi nhuận (NCI — minority interest) ─────────────────────────
+    attributable_profit: Optional[float] = None       # Income code 61 — LNST quy về cổ đông công ty mẹ
+    nci_profit: Optional[float] = None                # Income code 62 — LNST cổ đông không kiểm soát
+    nci_ratio: Optional[float] = None                 # nci_profit / total_net_profit (%) — nếu >30% = flag
+
+    # ── Tài sản vườn cây & tái canh (tỷ đồng) ───────────────────────────────
+    plantation_assets: Optional[float] = None         # BS 221 — TSCĐ hữu hình (proxy vườn cây cao su)
+    replanting_wip: Optional[float] = None            # BS 242 — XDCB dở dang (chi phí tái canh)
+    investment_property: Optional[float] = None       # BS 230 — BĐS đầu tư (đất KCN)
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+
+@dataclass
+class InsuranceMetrics:
+    """
+    Chỉ số đặc thù bảo hiểm (TT200) — BVH, BIC, PTI, PVI...
+    Derive từ FinancialMetrics — không cần keyword mapping riêng.
+
+    Logic:
+      - loss_ratio   = 100 - gross_margin  (COGS ≈ chi phí bồi thường + dự phòng)
+      - expense_ratio = sga_ratio          (selling + admin / premium revenue)
+      - combined_ratio = loss_ratio + expense_ratio
+        < 100% → có lãi từ nghiệp vụ bảo hiểm (underwriting profit)
+        > 100% → lỗ từ nghiệp vụ, phải bù đắp bằng lãi đầu tư tài chính
+    """
+    # ── Tỷ lệ nghiệp vụ (%) ──────────────────────────────────────────────────
+    loss_ratio: Optional[float] = None          # Chi phí bồi thường / Phí BH thuần
+    expense_ratio: Optional[float] = None       # (Hoa hồng + Quản lý) / Phí BH thuần
+    combined_ratio: Optional[float] = None      # loss_ratio + expense_ratio
+
+    # ── Thu nhập đầu tư ───────────────────────────────────────────────────────
+    investment_income: Optional[float] = None   # Thu nhập tài chính (đầu tư danh mục)
+    investment_yield: Optional[float] = None    # Thu nhập tài chính / Tổng TS (%)
+
+    # ── Tăng trưởng ───────────────────────────────────────────────────────────
+    premium_growth_yoy: Optional[float] = None  # % tăng phí BH thuần YoY
 
     def to_dict(self) -> dict:
         return {k: v for k, v in self.__dict__.items() if v is not None}

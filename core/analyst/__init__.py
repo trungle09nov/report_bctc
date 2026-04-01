@@ -14,7 +14,9 @@ from core.calculator.dupont import DuPontCalculator
 from core.calculator.cashflow import CashFlowCalculator
 from core.calculator.beneish import BeneishCalculator
 from core.calculator.anomaly import AnomalyDetector
+from core.calculator.validator import DataValidator
 from core.calculator.banking import BankingCalculator
+from core.calculator.sector_router import SectorRouter
 from core.analyst.llm import LLMAnalyst
 
 logger = logging.getLogger(__name__)
@@ -28,7 +30,9 @@ class FinBotService:
         self.cf_calc      = CashFlowCalculator()
         self.beneish_calc = BeneishCalculator()
         self.banking_calc = BankingCalculator()
+        self.sector_router = SectorRouter()
         self.detector     = AnomalyDetector()
+        self.validator    = DataValidator()
         self.analyst      = LLMAnalyst() if (use_llm and os.getenv("OPENAI_API_KEY")) else None
 
     def parse_file(self, file_path: str) -> ReportData:
@@ -47,6 +51,9 @@ class FinBotService:
         """Full calculation pipeline — không gọi LLM"""
         from models.report import AccountingStandard
 
+        # 0. Validation (test OCR errors)
+        val_flags = self.validator.validate(data)
+
         # 1. Chỉ số cơ bản
         metrics = self.calculator.calculate(data)
 
@@ -60,7 +67,14 @@ class FinBotService:
 
 
 
-        # 3. DuPont decomposition (luôn trả về object, nếu không áp dụng thì các trường None)
+        # 3. Sector-specific metrics (Securities, Real Estate, SGA/Capex cho Manufacturing/Consumer)
+        result_partial = AnalysisResult(metrics=metrics, banking=banking, flags=[])
+        try:
+            self.sector_router.enrich(data, result_partial)
+        except Exception as e:
+            logger.warning(f"Sector router error: {e}")
+
+        # 4. DuPont decomposition (luôn trả về object, nếu không áp dụng thì các trường None)
         try:
             dupont = self.dupont_calc.calculate(data, metrics)
         except Exception as e:
@@ -74,7 +88,7 @@ class FinBotService:
                 "note": "DuPont analysis not applicable for banks (TT49)"
             }
 
-        # 4. Cash flow quality & CCC (luôn trả về object)
+        # 5. Cash flow quality & CCC (luôn trả về object)
         try:
             cashflow = self.cf_calc.calculate(data, metrics)
         except Exception as e:
@@ -87,7 +101,7 @@ class FinBotService:
                 "note": "Cashflow metrics not applicable for banks (TT49)"
             }
 
-        # 5. Beneish M-Score — skip cho ngân hàng (model calibrate cho doanh nghiệp)
+        # 6. Beneish M-Score — skip cho ngân hàng (model calibrate cho doanh nghiệp)
         beneish = None
         if data.accounting_standard != AccountingStandard.TT49:
             try:
@@ -101,10 +115,16 @@ class FinBotService:
                 "note": "Beneish M-Score not applicable for banks (TT49)"
             }
 
-        # 6. Anomaly detection — basic + advanced
+        # 7. Anomaly detection — basic + advanced
         flags = self.detector.detect(data, metrics)
+        flags.extend(val_flags)  # Add validation flags
         try:
-            adv_flags = self.detector.detect_advanced(data, metrics, cashflow, beneish, banking)
+            adv_flags = self.detector.detect_advanced(
+                data, metrics, cashflow, beneish, banking,
+                securities=result_partial.securities,
+                real_estate=result_partial.real_estate,
+                insurance=result_partial.insurance,
+            )
             flags.extend(adv_flags)
         except Exception as e:
             logger.warning(f"Advanced anomaly error: {e}")
@@ -115,6 +135,9 @@ class FinBotService:
             cashflow=cashflow,
             beneish=beneish,
             banking=banking,
+            securities=result_partial.securities,
+            real_estate=result_partial.real_estate,
+            insurance=result_partial.insurance,
             flags=flags,
         )
 

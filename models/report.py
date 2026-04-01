@@ -37,6 +37,7 @@ class ReportData:
     accounting_standard: AccountingStandard = AccountingStandard.UNKNOWN
     report_date: str = ""           # Ngày lập báo cáo
     source_file: str = ""
+    is_annual: bool = False         # True nếu là BCTC năm (full-year), False nếu quý
 
     # Bảng cân đối kế toán (CĐKT)
     balance_sheet_current: FinancialSection = field(default_factory=FinancialSection)

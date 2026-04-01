@@ -14,6 +14,7 @@ from models.flag import Flag
 from core.analyst.prompts import (
     SYSTEM_FULL_ANALYSIS, build_analysis_prompt, build_chat_prompt
 )
+from core.parser.company_extractor import VN30_SECTOR_MAP, SECTOR_PROFIT_DRIVERS
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +68,25 @@ class LLMAnalyst:
         if not self.client:
             raise RuntimeError("LLM client chưa được khởi tạo (thiếu API key)")
             
+        # Build sector_info từ VN30_SECTOR_MAP nếu ticker được nhận diện
+        sector_info = None
+        ticker = getattr(data, "company_code", "") or ""
+        if ticker and ticker.upper() in VN30_SECTOR_MAP:
+            entry = VN30_SECTOR_MAP[ticker.upper()]
+            sector_info = {
+                "sector":        entry["sector"],
+                "sub":           entry["sub"],
+                "label":         entry["label"],
+                "profit_driver": SECTOR_PROFIT_DRIVERS.get(entry["sub"], ""),
+            }
+
         prompt = build_analysis_prompt(
             data, result.metrics, result.flags, language,
             dupont=result.dupont, cashflow=result.cashflow,
             beneish=result.beneish, banking=result.banking,
+            securities=result.securities, real_estate=result.real_estate,
+            insurance=result.insurance,
+            sector_info=sector_info,
         )
 
         try:
